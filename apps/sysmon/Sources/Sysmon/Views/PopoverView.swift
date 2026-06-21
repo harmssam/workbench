@@ -7,17 +7,16 @@ struct PopoverView: View {
         VStack(spacing: 0) {
             header
             Divider()
-            ScrollView {
-                VStack(spacing: 12) {
-                    networkCard
-                    diskCard
-                }
-                .padding(12)
+            VStack(spacing: 12) {
+                networkCard
+                diskCard
             }
+            .padding(12)
             Divider()
             footer
         }
         .frame(width: 300)
+        .background(.windowBackground)
     }
 
     private var header: some View {
@@ -131,7 +130,6 @@ private struct MetricCard: View {
         VStack(alignment: .leading, spacing: 10) {
             Label(title, systemImage: icon)
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.primary)
 
             HStack(spacing: 8) {
                 ForEach(Array(summary.enumerated()), id: \.offset) { _, item in
@@ -156,12 +154,12 @@ private struct MetricCard: View {
                         }
                     }
                 }
-                .background(Color.primary.opacity(0.04))
+                .background(Color.primary.opacity(0.05))
                 .clipShape(RoundedRectangle(cornerRadius: 6))
             }
         }
         .padding(10)
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(.quaternary.opacity(0.35))
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
@@ -178,7 +176,7 @@ private struct MetricCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(8)
-        .background(item.tint.opacity(0.08))
+        .background(item.tint.opacity(0.12))
         .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 
@@ -210,7 +208,7 @@ private struct MetricCard: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
-        .background(shaded ? Color.primary.opacity(0.03) : .clear)
+        .background(shaded ? Color.primary.opacity(0.04) : .clear)
     }
 
     private func isFlexible(_ column: MetricColumn) -> Bool {

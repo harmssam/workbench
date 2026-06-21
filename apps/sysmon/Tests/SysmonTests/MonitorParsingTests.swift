@@ -35,4 +35,11 @@ struct MonitorParsingTests {
         #expect(stats["Safari"]?.pid == 123)
         #expect(stats["kernel_task"] == nil)
     }
+
+    @Test("Formats Mbps from bytes per second")
+    func mbpsFormatting() {
+        #expect(ByteFormatter.formatMbps(bytesPerSecond: 0) == "0.0")
+        #expect(ByteFormatter.formatMbps(bytesPerSecond: 125_000) == "1.0")
+        #expect(ByteFormatter.formatMbps(bytesPerSecond: 12_500_000) == "100")
+    }
 }

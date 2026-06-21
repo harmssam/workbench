@@ -4,20 +4,25 @@ struct PopoverView: View {
     @EnvironmentObject private var appState: AppState
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(spacing: 0) {
             header
-            networkSection
             Divider()
-            diskSection
+            ScrollView {
+                VStack(spacing: 12) {
+                    networkCard
+                    diskCard
+                }
+                .padding(12)
+            }
+            Divider()
             footer
         }
-        .padding(14)
-        .frame(width: 320)
+        .frame(width: 300)
     }
 
     private var header: some View {
         HStack {
-            Label("Sysmon", systemImage: "gauge.with.dots.needle.67percent")
+            Text("Sysmon")
                 .font(.headline)
             Spacer()
             if appState.isLoading {
@@ -25,128 +30,196 @@ struct PopoverView: View {
                     .controlSize(.small)
             }
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
     }
 
-    private var networkSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            sectionTitle("Network", systemImage: "network")
-
-            HStack(spacing: 16) {
-                rateLabel(title: "Download", value: appState.downloadRate, color: .blue)
-                rateLabel(title: "Upload", value: appState.uploadRate, color: .green)
-            }
-
-            processList(
-                emptyMessage: "No active network processes",
-                rows: appState.networkProcesses.map { process in
-                    ProcessRow(
-                        name: process.name,
-                        primary: process.downloadRate,
-                        secondary: process.uploadRate,
-                        primaryLabel: "↓",
-                        secondaryLabel: "↑"
-                    )
-                }
-            )
-        }
+    private var networkCard: some View {
+        MetricCard(
+            title: "Network",
+            icon: "network",
+            summary: [
+                SummaryItem(label: "Download", value: "\(ByteFormatter.formatMbps(bytesPerSecond: appState.downloadRate)) Mbps", tint: .blue),
+                SummaryItem(label: "Upload", value: "\(ByteFormatter.formatMbps(bytesPerSecond: appState.uploadRate)) Mbps", tint: .green)
+            ],
+            columns: [
+                MetricColumn(title: "Process", width: .flexible, alignment: .leading),
+                MetricColumn(title: "↓ Mbps", width: .fixed(52), alignment: .trailing),
+                MetricColumn(title: "↑ Mbps", width: .fixed(52), alignment: .trailing)
+            ],
+            rows: appState.networkProcesses.map { process in
+                [
+                    process.name,
+                    ByteFormatter.formatMbps(bytesPerSecond: process.downloadRate),
+                    ByteFormatter.formatMbps(bytesPerSecond: process.uploadRate)
+                ]
+            },
+            emptyMessage: "No active network traffic"
+        )
     }
 
-    private var diskSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            sectionTitle("Disk", systemImage: "internaldrive")
-
-            HStack(spacing: 16) {
-                rateLabel(title: "Read", value: appState.diskReadRate, color: .orange)
-                rateLabel(title: "Write", value: appState.diskWriteRate, color: .purple)
-            }
-
-            processList(
-                emptyMessage: "No active disk processes",
-                rows: appState.diskProcesses.map { process in
-                    ProcessRow(
-                        name: process.name,
-                        primary: process.readRate,
-                        secondary: process.writeRate,
-                        primaryLabel: "R",
-                        secondaryLabel: "W"
-                    )
-                }
-            )
-        }
+    private var diskCard: some View {
+        MetricCard(
+            title: "Disk",
+            icon: "internaldrive",
+            summary: [
+                SummaryItem(label: "Read", value: ByteFormatter.formatRate(bytesPerSecond: appState.diskReadRate), tint: .orange),
+                SummaryItem(label: "Write", value: ByteFormatter.formatRate(bytesPerSecond: appState.diskWriteRate), tint: .purple)
+            ],
+            columns: [
+                MetricColumn(title: "Process", width: .flexible, alignment: .leading),
+                MetricColumn(title: "Read", width: .fixed(64), alignment: .trailing),
+                MetricColumn(title: "Write", width: .fixed(64), alignment: .trailing)
+            ],
+            rows: appState.diskProcesses.map { process in
+                [
+                    process.name,
+                    ByteFormatter.formatRate(bytesPerSecond: process.readRate),
+                    ByteFormatter.formatRate(bytesPerSecond: process.writeRate)
+                ]
+            },
+            emptyMessage: "No active disk I/O"
+        )
     }
 
     private var footer: some View {
         HStack {
-            if let error = appState.lastError {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .lineLimit(1)
-            } else {
-                Text("Updates every second")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            Text(appState.lastError ?? "Updates every second")
+                .font(.caption2)
+                .foregroundStyle(appState.lastError == nil ? Color.secondary : Color.red)
+                .lineLimit(1)
             Spacer()
             Button("Quit") {
                 NSApplication.shared.terminate(nil)
             }
             .buttonStyle(.borderless)
-            .font(.caption)
+            .font(.caption2)
         }
-    }
-
-    private func sectionTitle(_ title: String, systemImage: String) -> some View {
-        Label(title, systemImage: systemImage)
-            .font(.subheadline.weight(.semibold))
-    }
-
-    private func rateLabel(title: String, value: UInt64, color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(ByteFormatter.formatRate(bytesPerSecond: value))
-                .font(.system(.body, design: .monospaced))
-                .foregroundStyle(color)
-        }
-    }
-
-    @ViewBuilder
-    private func processList(emptyMessage: String, rows: [ProcessRow]) -> some View {
-        if rows.isEmpty {
-            Text(emptyMessage)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        } else {
-            VStack(alignment: .leading, spacing: 4) {
-                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                    row
-                }
-            }
-        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
     }
 }
 
-private struct ProcessRow: View {
-    let name: String
-    let primary: UInt64
-    let secondary: UInt64
-    let primaryLabel: String
-    let secondaryLabel: String
+// MARK: - Card components
+
+private struct SummaryItem {
+    let label: String
+    let value: String
+    let tint: Color
+}
+
+private struct MetricColumn {
+    enum Width {
+        case flexible
+        case fixed(CGFloat)
+    }
+
+    let title: String
+    let width: Width
+    let alignment: Alignment
+}
+
+private struct MetricCard: View {
+    let title: String
+    let icon: String
+    let summary: [SummaryItem]
+    let columns: [MetricColumn]
+    let rows: [[String]]
+    let emptyMessage: String
 
     var body: some View {
-        HStack {
-            Text(name)
-                .font(.caption)
-                .lineLimit(1)
-            Spacer()
-            Text("\(primaryLabel)\(ByteFormatter.shortRate(bytesPerSecond: primary))")
-                .font(.caption.monospaced())
-                .foregroundStyle(.secondary)
-            Text("\(secondaryLabel)\(ByteFormatter.shortRate(bytesPerSecond: secondary))")
-                .font(.caption.monospaced())
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 10) {
+            Label(title, systemImage: icon)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+
+            HStack(spacing: 8) {
+                ForEach(Array(summary.enumerated()), id: \.offset) { _, item in
+                    summaryTile(item)
+                }
+            }
+
+            if rows.isEmpty {
+                Text(emptyMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 4)
+            } else {
+                VStack(spacing: 0) {
+                    tableHeader
+                    Divider()
+                    ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+                        tableRow(row, shaded: index.isMultiple(of: 2))
+                        if index < rows.count - 1 {
+                            Divider().opacity(0.35)
+                        }
+                    }
+                }
+                .background(Color.primary.opacity(0.04))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
         }
+        .padding(10)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func summaryTile(_ item: SummaryItem) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(item.label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Text(item.value)
+                .font(.system(.callout, design: .monospaced).weight(.medium))
+                .foregroundStyle(item.tint)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(8)
+        .background(item.tint.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+
+    private var tableHeader: some View {
+        HStack(spacing: 8) {
+            ForEach(Array(columns.enumerated()), id: \.offset) { index, column in
+                Text(column.title)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: isFlexible(column) ? .infinity : nil, alignment: column.alignment)
+                    .frame(width: fixedWidth(for: column))
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+    }
+
+    private func tableRow(_ cells: [String], shaded: Bool) -> some View {
+        HStack(spacing: 8) {
+            ForEach(Array(columns.enumerated()), id: \.offset) { index, column in
+                let text = index < cells.count ? cells[index] : ""
+                Text(text)
+                    .font(index == 0 ? .caption : .caption.monospaced())
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: isFlexible(column) ? .infinity : nil, alignment: column.alignment)
+                    .frame(width: fixedWidth(for: column))
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(shaded ? Color.primary.opacity(0.03) : .clear)
+    }
+
+    private func isFlexible(_ column: MetricColumn) -> Bool {
+        if case .flexible = column.width { return true }
+        return false
+    }
+
+    private func fixedWidth(for column: MetricColumn) -> CGFloat? {
+        if case .fixed(let value) = column.width { return value }
+        return nil
     }
 }

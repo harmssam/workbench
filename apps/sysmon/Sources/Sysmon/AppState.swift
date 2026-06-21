@@ -17,14 +17,6 @@ final class AppState: ObservableObject {
     private var refreshTask: Task<Void, Never>?
     let refreshInterval: TimeInterval = 1.0
 
-    var menuBarLabel: String {
-        let down = ByteFormatter.shortRate(bytesPerSecond: downloadRate)
-        let up = ByteFormatter.shortRate(bytesPerSecond: uploadRate)
-        let read = ByteFormatter.shortRate(bytesPerSecond: diskReadRate)
-        let write = ByteFormatter.shortRate(bytesPerSecond: diskWriteRate)
-        return "↓\(down) ↑\(up)  R\(read) W\(write)"
-    }
-
     init() {
         startMonitoring()
     }

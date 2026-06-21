@@ -9,8 +9,10 @@ struct SysmonApp: App {
             PopoverView()
                 .environmentObject(appState)
         } label: {
-            Text(appState.menuBarLabel)
-                .font(.system(size: 11, design: .monospaced))
+            MenuBarLabelView(
+                downloadRate: appState.downloadRate,
+                uploadRate: appState.uploadRate
+            )
         }
         .menuBarExtraStyle(.window)
     }

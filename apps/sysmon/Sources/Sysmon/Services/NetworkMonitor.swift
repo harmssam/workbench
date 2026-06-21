@@ -1,0 +1,166 @@
+import Foundation
+
+actor NetworkMonitor {
+    struct InterfaceStats: Sendable {
+        let name: String
+        let bytesIn: UInt64
+        let bytesOut: UInt64
+    }
+
+    private var previousStats: [String: InterfaceStats] = [:]
+    private var previousTimestamp: Date?
+    private var previousProcessBytes: [String: (bytesIn: UInt64, bytesOut: UInt64, pid: Int32)] = [:]
+
+    func sampleRates() async -> (bytesIn: UInt64, bytesOut: UInt64) {
+        let current = await readInterfaceStats()
+        let now = Date()
+
+        defer {
+            previousStats = Dictionary(uniqueKeysWithValues: current.map { ($0.name, $0) })
+            previousTimestamp = now
+        }
+
+        guard let previousTime = previousTimestamp else {
+            return (0, 0)
+        }
+
+        let elapsed = now.timeIntervalSince(previousTime)
+        guard elapsed > 0 else { return (0, 0) }
+
+        var totalIn: UInt64 = 0
+        var totalOut: UInt64 = 0
+
+        for stat in current where !stat.name.hasPrefix("lo") {
+            guard let previous = previousStats[stat.name] else { continue }
+
+            let deltaIn = stat.bytesIn >= previous.bytesIn ? stat.bytesIn - previous.bytesIn : stat.bytesIn
+            let deltaOut = stat.bytesOut >= previous.bytesOut ? stat.bytesOut - previous.bytesOut : stat.bytesOut
+            totalIn += UInt64(Double(deltaIn) / elapsed)
+            totalOut += UInt64(Double(deltaOut) / elapsed)
+        }
+
+        return (totalIn, totalOut)
+    }
+
+    func sampleProcesses(limit: Int = 5) async -> [NetworkProcessActivity] {
+        guard let output = try? await ProcessRunner.run(
+            executable: "/usr/bin/nettop",
+            arguments: [
+                "-P", "-L", "1",
+                "-k", "time,interface,state,rx_dupe,rx_ooo,re-tx,rtt_avg,rcvsize,tx_win,tc_class,tc_mgt,cc_algo,P,C,R,W,arch",
+                "-t", "external"
+            ],
+            timeout: 10
+        ) else {
+            return []
+        }
+
+        let current = parseNettopOutput(output)
+        var activities: [NetworkProcessActivity] = []
+
+        for (name, bytes) in current {
+            guard let previous = previousProcessBytes[name] else { continue }
+
+            let downloadDelta = bytes.bytesIn >= previous.bytesIn ? bytes.bytesIn - previous.bytesIn : bytes.bytesIn
+            let uploadDelta = bytes.bytesOut >= previous.bytesOut ? bytes.bytesOut - previous.bytesOut : bytes.bytesOut
+
+            let downloadRate = UInt64(Double(downloadDelta))
+            let uploadRate = UInt64(Double(uploadDelta))
+
+            if downloadRate > 0 || uploadRate > 0 {
+                activities.append(NetworkProcessActivity(
+                    id: bytes.pid,
+                    name: name,
+                    downloadRate: downloadRate,
+                    uploadRate: uploadRate
+                ))
+            }
+        }
+
+        previousProcessBytes = current
+
+        return activities
+            .sorted { $0.totalRate > $1.totalRate }
+            .prefix(limit)
+            .map { $0 }
+    }
+
+    private func readInterfaceStats() async -> [InterfaceStats] {
+        guard let output = try? await ProcessRunner.run(
+            executable: "/usr/sbin/netstat",
+            arguments: ["-ib"]
+        ) else {
+            return []
+        }
+        return parseNetstatOutput(output)
+    }
+
+    func parseNetstatOutput(_ output: String) -> [InterfaceStats] {
+        var stats: [String: InterfaceStats] = [:]
+
+        for line in output.components(separatedBy: "\n").dropFirst() {
+            let columns = line.split(separator: " ", omittingEmptySubsequences: true)
+            guard columns.count >= 10,
+                  let packetsIn = UInt64(columns[4]),
+                  let bytesIn = UInt64(columns[6]),
+                  let packetsOut = UInt64(columns[7]),
+                  let bytesOut = UInt64(columns[9]) else {
+                continue
+            }
+
+            let name = String(columns[0])
+            if var existing = stats[name] {
+                existing = InterfaceStats(
+                    name: name,
+                    bytesIn: existing.bytesIn + bytesIn,
+                    bytesOut: existing.bytesOut + bytesOut
+                )
+                stats[name] = existing
+            } else {
+                stats[name] = InterfaceStats(name: name, bytesIn: bytesIn, bytesOut: bytesOut)
+            }
+
+            _ = packetsIn
+            _ = packetsOut
+        }
+
+        return Array(stats.values)
+    }
+
+    func parseNettopOutput(_ output: String) -> [String: (bytesIn: UInt64, bytesOut: UInt64, pid: Int32)] {
+        var result: [String: (bytesIn: UInt64, bytesOut: UInt64, pid: Int32)] = [:]
+
+        for line in output.components(separatedBy: "\n") {
+            if line.isEmpty || line.hasPrefix("time") || line.contains("state") {
+                continue
+            }
+
+            let components = line.components(separatedBy: ",")
+            guard components.count >= 3 else { continue }
+
+            let processInfo = components[0].trimmingCharacters(in: .whitespaces)
+            var processName = processInfo
+            var pid: Int32 = 0
+
+            if let dotRange = processInfo.range(of: ".", options: .backwards) {
+                processName = String(processInfo[..<dotRange.lowerBound])
+                pid = Int32(String(processInfo[dotRange.upperBound...])) ?? 0
+            }
+
+            if processName.isEmpty || processName == "kernel_task" {
+                continue
+            }
+
+            let bytesIn = UInt64(components[1].trimmingCharacters(in: .whitespaces)) ?? 0
+            let bytesOut = UInt64(components[2].trimmingCharacters(in: .whitespaces)) ?? 0
+
+            if let existing = result[processName] {
+                result[processName] = (existing.bytesIn + bytesIn, existing.bytesOut + bytesOut, existing.pid)
+            } else {
+                result[processName] = (bytesIn, bytesOut, pid)
+            }
+        }
+
+        return result
+    }
+}

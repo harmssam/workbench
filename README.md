@@ -16,7 +16,7 @@ docs/       # cross-cutting notes (optional)
 
 | App | Description | Status |
 |-----|-------------|--------|
-| [sysmon](apps/sysmon/) | macOS menu bar network + disk activity monitor | planning |
+| [sysmon](apps/sysmon/) | macOS menu bar network + disk activity monitor | MVP |
 
 ## Requirements
 

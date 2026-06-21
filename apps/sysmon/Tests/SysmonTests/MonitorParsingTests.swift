@@ -42,4 +42,12 @@ struct MonitorParsingTests {
         #expect(ByteFormatter.formatMbps(bytesPerSecond: 125_000) == "1.0")
         #expect(ByteFormatter.formatMbps(bytesPerSecond: 12_500_000) == "100")
     }
+
+    @Test("Formats compact menu bar Mbps")
+    func menuBarMbpsFormatting() {
+        #expect(ByteFormatter.formatMenuBarMbps(bytesPerSecond: 0) == "0")
+        #expect(ByteFormatter.formatMenuBarMbps(bytesPerSecond: 125_000) == "1.0")
+        #expect(ByteFormatter.formatMenuBarMbps(bytesPerSecond: 1_250_000) == "10")
+        #expect(ByteFormatter.formatMenuBarMbps(bytesPerSecond: 12_500_000) == "100")
+    }
 }

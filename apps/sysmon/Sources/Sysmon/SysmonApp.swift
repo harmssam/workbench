@@ -2,18 +2,11 @@ import SwiftUI
 
 @main
 struct SysmonApp: App {
-    @StateObject private var appState = AppState()
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        MenuBarExtra {
-            PopoverView()
-                .environmentObject(appState)
-        } label: {
-            MenuBarLabelView(
-                downloadRate: appState.downloadRate,
-                uploadRate: appState.uploadRate
-            )
+        Settings {
+            EmptyView()
         }
-        .menuBarExtraStyle(.window)
     }
 }

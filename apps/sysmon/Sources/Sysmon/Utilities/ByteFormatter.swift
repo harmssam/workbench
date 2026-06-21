@@ -13,12 +13,13 @@ enum ByteFormatter {
         return String(format: "%.1f", mbps)
     }
 
-    /// Shortest Mbps string for the menu bar (max ~3 chars).
+    /// Shortest Mbps string for the menu bar (max 3 chars).
     static func formatMenuBarMbps(bytesPerSecond: UInt64) -> String {
         let mbps = megabitsPerSecond(from: bytesPerSecond)
         if mbps < 0.05 { return "0" }
         if mbps >= 100 { return String(format: "%.0f", min(mbps, 999)) }
         if mbps >= 10 { return String(format: "%.0f", mbps) }
+        if mbps >= 1 { return String(format: "%.1f", mbps) }
         return String(format: "%.1f", mbps)
     }
 

@@ -8,6 +8,7 @@ final class AppState: ObservableObject {
     @Published var diskWriteRate: UInt64 = 0
     @Published var cpuUsage = CPUUsageSample.invalid
     @Published var cpuProcesses: [CPUProcessActivity] = []
+    @Published var gpuSnapshot = GPUSnapshot.unavailable
     @Published var networkProcesses: [NetworkProcessActivity] = []
     @Published var diskProcesses: [ProcessActivity] = []
     @Published var isLoading = false
@@ -16,6 +17,7 @@ final class AppState: ObservableObject {
     let networkMonitor = NetworkMonitor()
     let diskMonitor = DiskMonitor()
     let cpuMonitor = CPUMonitor()
+    let gpuMonitor = GPUMonitor()
 
     private var refreshTask: Task<Void, Never>?
     let refreshInterval: TimeInterval = 1.0
@@ -45,6 +47,7 @@ final class AppState: ObservableObject {
         diskReadRate = disk.read
         diskWriteRate = disk.write
         cpuUsage = await cpuMonitor.sampleUsage()
+        gpuSnapshot = await gpuMonitor.sample()
         self.networkProcesses = await networkProcesses
         self.diskProcesses = await diskProcesses
         self.cpuProcesses = await cpuProcesses

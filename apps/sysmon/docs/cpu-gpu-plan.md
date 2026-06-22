@@ -159,11 +159,11 @@ Port Stats' IOKit `IOAccelerator` reader directly (~100–150 LOC). Avoid MacSta
 - [x] ~3 files, ~200 LOC
 
 ### PR 2 — GPU monitor + popover card
-- [ ] `GPUMonitor` actor with IOKit `IOAccelerator`
-- [ ] Platform-aware memory label (shared vs VRAM)
-- [ ] GPU `MetricCard` in popover
-- [ ] Graceful unavailable state
-- [ ] ~3 files, ~200 LOC
+- [x] `GPUMonitor` actor with IOKit `IOAccelerator`
+- [x] Platform-aware memory label (shared vs VRAM)
+- [x] GPU `MetricCard` in popover
+- [x] Graceful unavailable state
+- [x] ~3 files, ~200 LOC
 
 ### PR 3 — Polish (optional)
 - [ ] Widen popover / scroll if 4 cards tight

@@ -12,10 +12,11 @@ struct PopoverView: View {
                     networkCard
                     diskCard
                     cpuCard
+                    gpuCard
                 }
                 .padding(12)
             }
-            .frame(maxHeight: 420)
+            .frame(maxHeight: 480)
             Divider()
             footer
         }
@@ -93,6 +94,53 @@ struct PopoverView: View {
         )
     }
 
+    private var gpuCard: some View {
+        let gpu = appState.gpuSnapshot
+
+        return MetricCard(
+            title: "GPU",
+            icon: "display",
+            subtitle: gpu.isAvailable ? gpu.name : nil,
+            summary: gpuSummaryItems(for: gpu),
+            columns: [],
+            rows: [],
+            emptyMessage: gpu.isAvailable ? nil : "GPU metrics unavailable on this system"
+        )
+    }
+
+    private func gpuSummaryItems(for gpu: GPUSnapshot) -> [SummaryItem] {
+        guard gpu.isAvailable else {
+            return [
+                SummaryItem(label: "Status", value: "Unavailable", tint: .secondary)
+            ]
+        }
+
+        var items = [
+            SummaryItem(
+                label: "Utilization",
+                value: gpu.utilization.map { PercentFormatter.format($0) } ?? "—",
+                tint: .indigo
+            ),
+            SummaryItem(
+                label: gpu.memoryLabel,
+                value: gpu.memoryUsedBytes.map { ByteFormatter.formatBytes($0) } ?? "—",
+                tint: .teal
+            )
+        ]
+
+        if let renderer = gpu.rendererUtilization, let tiler = gpu.tilerUtilization {
+            items.append(
+                SummaryItem(
+                    label: "Render/Tiler",
+                    value: "\(PercentFormatter.format(renderer)) / \(PercentFormatter.format(tiler))",
+                    tint: .cyan
+                )
+            )
+        }
+
+        return items
+    }
+
     private var diskCard: some View {
         MetricCard(
             title: "Disk",
@@ -157,24 +205,61 @@ private struct MetricColumn {
 private struct MetricCard: View {
     let title: String
     let icon: String
+    let subtitle: String?
     let summary: [SummaryItem]
     let columns: [MetricColumn]
     let rows: [[String]]
-    let emptyMessage: String
+    let emptyMessage: String?
+
+    init(
+        title: String,
+        icon: String,
+        subtitle: String? = nil,
+        summary: [SummaryItem],
+        columns: [MetricColumn],
+        rows: [[String]],
+        emptyMessage: String? = nil
+    ) {
+        self.title = title
+        self.icon = icon
+        self.subtitle = subtitle
+        self.summary = summary
+        self.columns = columns
+        self.rows = rows
+        self.emptyMessage = emptyMessage
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label(title, systemImage: icon)
-                .font(.subheadline.weight(.semibold))
-
-            HStack(spacing: 8) {
-                ForEach(Array(summary.enumerated()), id: \.offset) { _, item in
-                    summaryTile(item)
+            VStack(alignment: .leading, spacing: 2) {
+                Label(title, systemImage: icon)
+                    .font(.subheadline.weight(.semibold))
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
             }
 
-            if rows.isEmpty {
-                Text(emptyMessage)
+            if !summary.isEmpty {
+                HStack(spacing: 8) {
+                    ForEach(Array(summary.enumerated()), id: \.offset) { _, item in
+                        summaryTile(item)
+                    }
+                }
+            }
+
+            if columns.isEmpty {
+                if let emptyMessage {
+                    Text(emptyMessage)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 4)
+                }
+            } else if rows.isEmpty {
+                Text(emptyMessage ?? "No activity")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)

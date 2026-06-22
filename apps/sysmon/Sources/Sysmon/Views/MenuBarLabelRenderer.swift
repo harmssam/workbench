@@ -8,7 +8,7 @@ enum MenuBarLabelRenderer {
 
         let scale: CGFloat = 2
         let width: CGFloat = 28
-        let height: CGFloat = 16
+        let height: CGFloat = 12
         let size = NSSize(width: width * scale, height: height * scale)
 
         let image = NSImage(size: size)
@@ -25,7 +25,7 @@ enum MenuBarLabelRenderer {
             .foregroundColor: NSColor.labelColor
         ]
 
-        drawRow("\(down)↓", y: 8, width: width, attributes: attributes)
+        drawRow("\(down)↓", y: 5.5, width: width, attributes: attributes)
         drawRow("\(up)↑", y: 0, width: width, attributes: attributes)
 
         image.unlockFocus()

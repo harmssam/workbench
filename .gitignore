@@ -33,7 +33,7 @@ target/
 
 # Swift / Xcode
 .build/
-apps/sysmon/dist/
+apps/pulse/dist/
 DerivedData/
 *.xcuserstate
 *.xcworkspace/xcuserdata/

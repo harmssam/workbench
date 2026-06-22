@@ -1,8 +1,8 @@
-# scripts
+# workbench
 
-Small scripts and applications — separate from [Clevertech](https://github.com/harmssam/Clevertech_v1).
+Personal apps and scripts — separate from [Clevertech](https://github.com/harmssam/Clevertech_v1).
 
-Each app or tool lives under `apps/` or `scripts/`. One-off utilities go in `scripts/`; anything with its own UI, lifecycle, or distribution story goes in `apps/`.
+Each project lives under `apps/` or `scripts/`. One-off utilities go in `scripts/`; anything with its own UI, lifecycle, or distribution story goes in `apps/`.
 
 ## Structure
 

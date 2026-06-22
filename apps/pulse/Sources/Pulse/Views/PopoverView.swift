@@ -22,7 +22,7 @@ struct PopoverView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack {
-                Text("Sysmon")
+                Text("Pulse")
                     .font(.headline)
                 Spacer()
                 if appState.isLoading {

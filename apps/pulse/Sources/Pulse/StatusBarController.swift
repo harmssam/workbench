@@ -37,7 +37,7 @@ final class StatusBarController: NSObject {
         button.target = self
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         button.imagePosition = .imageOnly
-        button.toolTip = "Sysmon"
+        button.toolTip = "Pulse"
         button.appearsDisabled = false
     }
 

@@ -3,23 +3,23 @@
 import PackageDescription
 
 let package = Package(
-    name: "Sysmon",
+    name: "Pulse",
     platforms: [
         .macOS(.v14)
     ],
     products: [
-        .executable(name: "Sysmon", targets: ["Sysmon"])
+        .executable(name: "Pulse", targets: ["Pulse"])
     ],
     targets: [
         .executableTarget(
-            name: "Sysmon",
-            path: "Sources/Sysmon",
+            name: "Pulse",
+            path: "Sources/Pulse",
             exclude: ["Info.plist"]
         ),
         .testTarget(
-            name: "SysmonTests",
-            dependencies: ["Sysmon"],
-            path: "Tests/SysmonTests"
+            name: "PulseTests",
+            dependencies: ["Pulse"],
+            path: "Tests/PulseTests"
         )
     ]
 )

@@ -1,11 +1,12 @@
-# sysmon
+# Pulse
 
-Lightweight macOS menu bar app for real-time **network** and **disk** activity.
+Lightweight macOS menu bar app for real-time **network**, **disk**, **CPU**, and **GPU** activity.
 
 ## Features
 
-- Menu bar: live download/upload and disk read/write rates
+- Menu bar: live download/upload Mbps
 - Popover: network, disk, CPU, and GPU totals with top 5 active processes per section
+- Sparkline histories for each metric
 - No root, no SIP changes, no third-party dependencies
 
 ## Requirements
@@ -16,14 +17,14 @@ Lightweight macOS menu bar app for real-time **network** and **disk** activity.
 ## Build & run
 
 ```bash
-cd apps/sysmon
+cd apps/pulse
 
 # Run directly (debug)
 swift run
 
 # Build .app bundle
 ./build-app.sh
-open dist/Sysmon.app
+open dist/Pulse.app
 ```
 
 ## Development
@@ -36,7 +37,7 @@ swift test
 ## Architecture
 
 ```
-MenuBarExtra (SwiftUI)
+NSStatusItem + NSPopover (SwiftUI)
 ├── NetworkMonitor  → netstat -ib rates, nettop -P per-process
 ├── DiskMonitor     → ioreg IOBlockStorageDriver stats, proc_pid_rusage
 ├── CPUMonitor      → host_statistics CPU load, ps top processes
@@ -48,6 +49,7 @@ Patterns borrowed from [Stats](https://github.com/exelban/stats), [MacStatusBar]
 ## Docs
 
 - [Research notes](docs/research.md)
+- [CPU & GPU plan](docs/cpu-gpu-plan.md)
 
 ## Status
 

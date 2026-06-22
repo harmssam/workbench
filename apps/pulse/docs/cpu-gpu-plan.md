@@ -1,4 +1,4 @@
-# sysmon — CPU & GPU plan
+# Pulse — CPU & GPU plan
 
 Compiled June 2026. Extends the existing network + disk popover with compute metrics, borrowing from open source where possible.
 

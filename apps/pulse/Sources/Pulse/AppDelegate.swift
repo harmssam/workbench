@@ -19,7 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func terminateDuplicateInstances() {
-        let bundleID = Bundle.main.bundleIdentifier ?? "ca.harms.sysmon"
+        let bundleID = Bundle.main.bundleIdentifier ?? "ca.harms.pulse"
         let currentPID = ProcessInfo.processInfo.processIdentifier
 
         for app in NSRunningApplication.runningApplications(withBundleIdentifier: bundleID) {

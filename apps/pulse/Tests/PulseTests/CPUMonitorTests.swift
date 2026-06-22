@@ -1,5 +1,5 @@
 import Testing
-@testable import Sysmon
+@testable import Pulse
 
 @Suite("CPU monitor")
 struct CPUMonitorTests {

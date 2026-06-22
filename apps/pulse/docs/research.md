@@ -1,4 +1,4 @@
-# sysmon — research notes
+# Pulse — research notes
 
 Compiled June 2026 from open-source landscape review for a simple macOS network + disk monitor.
 

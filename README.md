@@ -16,7 +16,7 @@ docs/       # cross-cutting notes (optional)
 
 | App | Description | Status |
 |-----|-------------|--------|
-| [sysmon](apps/sysmon/) | macOS menu bar network + disk activity monitor | MVP |
+| [Pulse](apps/pulse/) | macOS menu bar network, disk, CPU, and GPU monitor | MVP |
 
 ## Requirements
 

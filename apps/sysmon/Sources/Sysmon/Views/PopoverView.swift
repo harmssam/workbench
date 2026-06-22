@@ -15,6 +15,7 @@ struct PopoverView: View {
             Divider()
             footer
         }
+        .frame(width: popoverWidth, height: 534)
         .background(Color(nsColor: .windowBackgroundColor))
     }
 

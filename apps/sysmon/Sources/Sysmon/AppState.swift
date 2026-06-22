@@ -14,13 +14,34 @@ final class AppState: ObservableObject {
     @Published var isLoading = false
     @Published var lastError: String?
 
+    @Published private(set) var networkDownHistory: [Double] = []
+    @Published private(set) var networkUpHistory: [Double] = []
+    @Published private(set) var diskReadHistory: [Double] = []
+    @Published private(set) var diskWriteHistory: [Double] = []
+    @Published private(set) var cpuHistory: [Double] = []
+    @Published private(set) var gpuHistory: [Double] = []
+
     let networkMonitor = NetworkMonitor()
     let diskMonitor = DiskMonitor()
     let cpuMonitor = CPUMonitor()
     let gpuMonitor = GPUMonitor()
 
     private var refreshTask: Task<Void, Never>?
+    private var downHistory = HistoryBuffer()
+    private var upHistory = HistoryBuffer()
+    private var diskReadHistoryBuffer = HistoryBuffer()
+    private var diskWriteHistoryBuffer = HistoryBuffer()
+    private var cpuHistoryBuffer = HistoryBuffer()
+    private var gpuHistoryBuffer = HistoryBuffer()
+
     let refreshInterval: TimeInterval = 1.0
+
+    var headerSubtitle: String {
+        let down = ByteFormatter.formatMenuBarMbps(bytesPerSecond: downloadRate)
+        let up = ByteFormatter.formatMenuBarMbps(bytesPerSecond: uploadRate)
+        let cpu = cpuUsage.isValid ? PercentFormatter.format(cpuUsage.total) : "—"
+        return "↓\(down) ↑\(up) Mbps · CPU \(cpu)"
+    }
 
     init() {
         startMonitoring()
@@ -51,7 +72,30 @@ final class AppState: ObservableObject {
         self.networkProcesses = await networkProcesses
         self.diskProcesses = await diskProcesses
         self.cpuProcesses = await cpuProcesses
+        updateHistories()
         isLoading = false
+    }
+
+    private func updateHistories() {
+        downHistory.append(ByteFormatter.megabitsPerSecond(from: downloadRate))
+        upHistory.append(ByteFormatter.megabitsPerSecond(from: uploadRate))
+        diskReadHistoryBuffer.append(Double(diskReadRate))
+        diskWriteHistoryBuffer.append(Double(diskWriteRate))
+
+        if cpuUsage.isValid {
+            cpuHistoryBuffer.append(cpuUsage.total)
+        }
+
+        if let utilization = gpuSnapshot.utilization {
+            gpuHistoryBuffer.append(utilization)
+        }
+
+        networkDownHistory = downHistory.values
+        networkUpHistory = upHistory.values
+        diskReadHistory = diskReadHistoryBuffer.values
+        diskWriteHistory = diskWriteHistoryBuffer.values
+        cpuHistory = cpuHistoryBuffer.values
+        gpuHistory = gpuHistoryBuffer.values
     }
 
     private func startMonitoring() {

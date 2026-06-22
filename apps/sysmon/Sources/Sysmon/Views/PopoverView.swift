@@ -1,41 +1,55 @@
+import AppKit
 import SwiftUI
 
 struct PopoverView: View {
-    @EnvironmentObject private var appState: AppState
+    @ObservedObject var appState: AppState
+
+    private let popoverWidth: CGFloat = 320
+    private let scrollHeight: CGFloat = 420
 
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider()
-            ScrollView {
-                VStack(spacing: 12) {
-                    networkCard
-                    diskCard
-                    cpuCard
-                    gpuCard
-                }
-                .padding(12)
-            }
-            .frame(maxHeight: 480)
+            cardScroller
             Divider()
             footer
         }
-        .frame(width: 300)
-        .background(.windowBackground)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     private var header: some View {
-        HStack {
-            Text("Sysmon")
-                .font(.headline)
-            Spacer()
-            if appState.isLoading {
-                ProgressView()
-                    .controlSize(.small)
+        VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                Text("Sysmon")
+                    .font(.headline)
+                Spacer()
+                if appState.isLoading {
+                    ProgressView()
+                        .controlSize(.small)
+                }
             }
+            Text(appState.headerSubtitle)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 14)
         .padding(.vertical, 10)
+    }
+
+    private var cardScroller: some View {
+        ScrollView(.vertical, showsIndicators: true) {
+            LazyVStack(spacing: 12) {
+                networkCard
+                diskCard
+                cpuCard
+                gpuCard
+            }
+            .padding(12)
+            .frame(width: popoverWidth)
+        }
+        .frame(width: popoverWidth, height: scrollHeight, alignment: .top)
     }
 
     private var networkCard: some View {
@@ -45,6 +59,10 @@ struct PopoverView: View {
             summary: [
                 SummaryItem(label: "Download", value: "\(ByteFormatter.formatMbps(bytesPerSecond: appState.downloadRate)) Mbps", tint: .blue),
                 SummaryItem(label: "Upload", value: "\(ByteFormatter.formatMbps(bytesPerSecond: appState.uploadRate)) Mbps", tint: .green)
+            ],
+            sparklines: [
+                SparklineSpec(values: appState.networkDownHistory, color: .blue, label: "Download"),
+                SparklineSpec(values: appState.networkUpHistory, color: .green, label: "Upload")
             ],
             columns: [
                 MetricColumn(title: "Process", width: .flexible, alignment: .leading),
@@ -83,6 +101,9 @@ struct PopoverView: View {
                     tint: .yellow
                 )
             ],
+            sparklines: [
+                SparklineSpec(values: appState.cpuHistory, color: .red, label: "Usage")
+            ],
             columns: [
                 MetricColumn(title: "Process", width: .flexible, alignment: .leading),
                 MetricColumn(title: "CPU", width: .fixed(52), alignment: .trailing)
@@ -102,6 +123,9 @@ struct PopoverView: View {
             icon: "display",
             subtitle: gpu.isAvailable ? gpu.name : nil,
             summary: gpuSummaryItems(for: gpu),
+            sparklines: gpu.isAvailable ? [
+                SparklineSpec(values: appState.gpuHistory, color: .indigo, label: "Utilization")
+            ] : [],
             columns: [],
             rows: [],
             emptyMessage: gpu.isAvailable ? nil : "GPU metrics unavailable on this system"
@@ -149,6 +173,10 @@ struct PopoverView: View {
                 SummaryItem(label: "Read", value: ByteFormatter.formatRate(bytesPerSecond: appState.diskReadRate), tint: .orange),
                 SummaryItem(label: "Write", value: ByteFormatter.formatRate(bytesPerSecond: appState.diskWriteRate), tint: .purple)
             ],
+            sparklines: [
+                SparklineSpec(values: appState.diskReadHistory, color: .orange, label: "Read"),
+                SparklineSpec(values: appState.diskWriteHistory, color: .purple, label: "Write")
+            ],
             columns: [
                 MetricColumn(title: "Process", width: .flexible, alignment: .leading),
                 MetricColumn(title: "Read", width: .fixed(64), alignment: .trailing),
@@ -178,12 +206,18 @@ struct PopoverView: View {
             .buttonStyle(.borderless)
             .font(.caption2)
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 14)
         .padding(.vertical, 8)
     }
 }
 
 // MARK: - Card components
+
+private struct SparklineSpec {
+    let values: [Double]
+    let color: Color
+    let label: String
+}
 
 private struct SummaryItem {
     let label: String
@@ -207,6 +241,7 @@ private struct MetricCard: View {
     let icon: String
     let subtitle: String?
     let summary: [SummaryItem]
+    let sparklines: [SparklineSpec]
     let columns: [MetricColumn]
     let rows: [[String]]
     let emptyMessage: String?
@@ -216,6 +251,7 @@ private struct MetricCard: View {
         icon: String,
         subtitle: String? = nil,
         summary: [SummaryItem],
+        sparklines: [SparklineSpec] = [],
         columns: [MetricColumn],
         rows: [[String]],
         emptyMessage: String? = nil
@@ -224,6 +260,7 @@ private struct MetricCard: View {
         self.icon = icon
         self.subtitle = subtitle
         self.summary = summary
+        self.sparklines = sparklines
         self.columns = columns
         self.rows = rows
         self.emptyMessage = emptyMessage
@@ -231,14 +268,20 @@ private struct MetricCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Label(title, systemImage: icon)
-                    .font(.subheadline.weight(.semibold))
-                if let subtitle {
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+            HStack(spacing: 8) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(accentColor)
+                    .frame(width: 3, height: 28)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Label(title, systemImage: icon)
+                        .font(.subheadline.weight(.semibold))
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
             }
 
@@ -246,6 +289,14 @@ private struct MetricCard: View {
                 HStack(spacing: 8) {
                     ForEach(Array(summary.enumerated()), id: \.offset) { _, item in
                         summaryTile(item)
+                    }
+                }
+            }
+
+            if !sparklines.isEmpty {
+                VStack(spacing: 6) {
+                    ForEach(Array(sparklines.enumerated()), id: \.offset) { _, spec in
+                        SparklineView(values: spec.values, color: spec.color, label: spec.label)
                     }
                 }
             }
@@ -280,8 +331,16 @@ private struct MetricCard: View {
             }
         }
         .padding(10)
-        .background(.quaternary.opacity(0.35))
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.55))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+        )
         .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var accentColor: Color {
+        summary.first?.tint ?? .accentColor
     }
 
     private func summaryTile(_ item: SummaryItem) -> some View {

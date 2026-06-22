@@ -8,6 +8,7 @@ actor DiskMonitor {
     private var previousBytes: (read: UInt64, write: UInt64)?
     private var previousTimestamp: Date?
     private var previousProcessStats: [Int32: (read: UInt64, write: UInt64)] = [:]
+    private var lastProcessSampleTime: Date?
 
     func sampleRates() async -> (read: UInt64, write: UInt64) {
         let current = await readCumulativeBytes()
@@ -42,6 +43,10 @@ actor DiskMonitor {
             return []
         }
 
+        let now = Date()
+        let elapsed = lastProcessSampleTime.map { max(now.timeIntervalSince($0), 0.001) } ?? 1.0
+        defer { lastProcessSampleTime = now }
+
         var activities: [ProcessActivity] = []
 
         for line in output.components(separatedBy: "\n") {
@@ -63,8 +68,8 @@ actor DiskMonitor {
             let writeDelta = current.write >= previous.write ? current.write - previous.write : current.write
             previousProcessStats[pid] = current
 
-            let readRate = UInt64(Double(readDelta))
-            let writeRate = UInt64(Double(writeDelta))
+            let readRate = UInt64(Double(readDelta) / elapsed)
+            let writeRate = UInt64(Double(writeDelta) / elapsed)
 
             if readRate > 0 || writeRate > 0 {
                 activities.append(ProcessActivity(id: pid, name: name, readRate: readRate, writeRate: writeRate))
@@ -88,21 +93,23 @@ actor DiskMonitor {
         var totalRead: UInt64 = 0
         var totalWrite: UInt64 = 0
 
-        for line in output.components(separatedBy: "\n") {
-            if line.contains("\"Bytes (Read)\""), let value = extractNumber(from: line) {
-                totalRead += value
-            } else if line.contains("\"Bytes (Write)\""), let value = extractNumber(from: line) {
-                totalWrite += value
-            }
+        for line in output.components(separatedBy: "\n") where line.contains("Statistics") {
+            totalRead += parseStatisticValue(in: line, key: "Bytes (Read)")
+            totalWrite += parseStatisticValue(in: line, key: "Bytes (Write)")
         }
 
         return (totalRead, totalWrite)
     }
 
-    private func extractNumber(from line: String) -> UInt64? {
-        let parts = line.components(separatedBy: "=")
-        guard parts.count > 1 else { return nil }
-        return UInt64(parts[1].trimmingCharacters(in: .whitespaces))
+    func parseStatisticValue(in line: String, key: String) -> UInt64 {
+        let pattern = "\"\(NSRegularExpression.escapedPattern(for: key))\"=(\\d+)"
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
+              let valueRange = Range(match.range(at: 1), in: line),
+              let value = UInt64(line[valueRange]) else {
+            return 0
+        }
+        return value
     }
 
     private func readProcessIO(pid: Int32) -> (read: UInt64, write: UInt64)? {

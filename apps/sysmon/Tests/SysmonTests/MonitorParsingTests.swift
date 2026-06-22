@@ -50,4 +50,18 @@ struct MonitorParsingTests {
         #expect(ByteFormatter.formatMenuBarMbps(bytesPerSecond: 1_250_000) == "10")
         #expect(ByteFormatter.formatMenuBarMbps(bytesPerSecond: 12_500_000) == "100")
     }
+
+    @Test("Parses ioreg statistics dictionary lines")
+    func ioregStatisticsParsing() async {
+        let monitor = DiskMonitor()
+        let line = """
+        "Statistics" = {"Operations (Write)"=8123719,"Bytes (Read)"=472490442752,"Bytes (Write)"=191732469760,"Operations (Read)"=14754103}
+        """
+
+        let read = await monitor.parseStatisticValue(in: line, key: "Bytes (Read)")
+        let write = await monitor.parseStatisticValue(in: line, key: "Bytes (Write)")
+
+        #expect(read == 472_490_442_752)
+        #expect(write == 191_732_469_760)
+    }
 }

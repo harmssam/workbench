@@ -25,8 +25,8 @@ enum MenuBarLabelRenderer {
             .foregroundColor: NSColor.labelColor
         ]
 
-        drawRow("↓\(down)", y: 8, width: width, attributes: attributes)
-        drawRow("↑\(up)", y: 0, width: width, attributes: attributes)
+        drawRow("\(down)↓", y: 8, width: width, attributes: attributes)
+        drawRow("\(up)↑", y: 0, width: width, attributes: attributes)
 
         image.unlockFocus()
         image.isTemplate = false

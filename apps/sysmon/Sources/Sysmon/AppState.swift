@@ -6,6 +6,8 @@ final class AppState: ObservableObject {
     @Published var uploadRate: UInt64 = 0
     @Published var diskReadRate: UInt64 = 0
     @Published var diskWriteRate: UInt64 = 0
+    @Published var cpuUsage = CPUUsageSample.invalid
+    @Published var cpuProcesses: [CPUProcessActivity] = []
     @Published var networkProcesses: [NetworkProcessActivity] = []
     @Published var diskProcesses: [ProcessActivity] = []
     @Published var isLoading = false
@@ -13,6 +15,7 @@ final class AppState: ObservableObject {
 
     let networkMonitor = NetworkMonitor()
     let diskMonitor = DiskMonitor()
+    let cpuMonitor = CPUMonitor()
 
     private var refreshTask: Task<Void, Never>?
     let refreshInterval: TimeInterval = 1.0
@@ -33,6 +36,7 @@ final class AppState: ObservableObject {
         async let diskRates = diskMonitor.sampleRates()
         async let networkProcesses = networkMonitor.sampleProcesses()
         async let diskProcesses = diskMonitor.sampleProcesses()
+        async let cpuProcesses = cpuMonitor.sampleProcesses()
 
         let rates = await networkRates
         let disk = await diskRates
@@ -40,8 +44,10 @@ final class AppState: ObservableObject {
         uploadRate = rates.bytesOut
         diskReadRate = disk.read
         diskWriteRate = disk.write
+        cpuUsage = await cpuMonitor.sampleUsage()
         self.networkProcesses = await networkProcesses
         self.diskProcesses = await diskProcesses
+        self.cpuProcesses = await cpuProcesses
         isLoading = false
     }
 

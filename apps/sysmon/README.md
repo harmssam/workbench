@@ -5,7 +5,7 @@ Lightweight macOS menu bar app for real-time **network** and **disk** activity.
 ## Features
 
 - Menu bar: live download/upload and disk read/write rates
-- Popover: per-section totals and top 5 active processes
+- Popover: network, disk, and CPU totals with top 5 active processes per section
 - No root, no SIP changes, no third-party dependencies
 
 ## Requirements
@@ -38,7 +38,8 @@ swift test
 ```
 MenuBarExtra (SwiftUI)
 ├── NetworkMonitor  → netstat -ib rates, nettop -P per-process
-└── DiskMonitor     → ioreg IOBlockStorageDriver stats, proc_pid_rusage
+├── DiskMonitor     → ioreg IOBlockStorageDriver stats, proc_pid_rusage
+└── CPUMonitor      → host_statistics CPU load, ps top processes
 ```
 
 Patterns borrowed from [Stats](https://github.com/exelban/stats), [MacStatusBar](https://github.com/ysyyork/MacStatusBar), and [Netwatch](https://github.com/corvid-agent/Netwatch).

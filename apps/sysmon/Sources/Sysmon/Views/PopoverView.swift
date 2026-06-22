@@ -7,11 +7,15 @@ struct PopoverView: View {
         VStack(spacing: 0) {
             header
             Divider()
-            VStack(spacing: 12) {
-                networkCard
-                diskCard
+            ScrollView {
+                VStack(spacing: 12) {
+                    networkCard
+                    diskCard
+                    cpuCard
+                }
+                .padding(12)
             }
-            .padding(12)
+            .frame(maxHeight: 420)
             Divider()
             footer
         }
@@ -54,6 +58,38 @@ struct PopoverView: View {
                 ]
             },
             emptyMessage: "No active network traffic"
+        )
+    }
+
+    private var cpuCard: some View {
+        MetricCard(
+            title: "CPU",
+            icon: "cpu",
+            summary: [
+                SummaryItem(
+                    label: "Total",
+                    value: appState.cpuUsage.isValid ? PercentFormatter.format(appState.cpuUsage.total) : "—",
+                    tint: .red
+                ),
+                SummaryItem(
+                    label: "User",
+                    value: appState.cpuUsage.isValid ? PercentFormatter.format(appState.cpuUsage.user) : "—",
+                    tint: .orange
+                ),
+                SummaryItem(
+                    label: "System",
+                    value: appState.cpuUsage.isValid ? PercentFormatter.format(appState.cpuUsage.system) : "—",
+                    tint: .yellow
+                )
+            ],
+            columns: [
+                MetricColumn(title: "Process", width: .flexible, alignment: .leading),
+                MetricColumn(title: "CPU", width: .fixed(52), alignment: .trailing)
+            ],
+            rows: appState.cpuProcesses.map { process in
+                [process.name, PercentFormatter.formatDetailed(process.usage)]
+            },
+            emptyMessage: "No active CPU usage"
         )
     }
 

@@ -7,10 +7,23 @@ enum MenuBarLabelRenderer {
         let up = ByteFormatter.formatMenuBarMbps(bytesPerSecond: upload)
 
         let scale: CGFloat = 2
-        let width: CGFloat = 28
         let height: CGFloat = 12
-        let size = NSSize(width: width * scale, height: height * scale)
 
+        let font = NSFont.monospacedDigitSystemFont(ofSize: 6, weight: .medium)
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: NSColor.labelColor
+        ]
+
+        let downRow = "\(down)↓"
+        let upRow = "\(up)↑"
+        let contentWidth = max(
+            (downRow as NSString).size(withAttributes: attributes).width,
+            (upRow as NSString).size(withAttributes: attributes).width
+        )
+        let width = ceil(contentWidth)
+
+        let size = NSSize(width: width * scale, height: height * scale)
         let image = NSImage(size: size)
         image.lockFocus()
 
@@ -19,14 +32,8 @@ enum MenuBarLabelRenderer {
             ctx.scaleBy(x: scale, y: scale)
         }
 
-        let font = NSFont.monospacedDigitSystemFont(ofSize: 6, weight: .medium)
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: font,
-            .foregroundColor: NSColor.labelColor
-        ]
-
-        drawRow("\(down)↓", y: 5.5, width: width, attributes: attributes)
-        drawRow("\(up)↑", y: 0, width: width, attributes: attributes)
+        drawRow(downRow, y: 5.5, width: width, attributes: attributes)
+        drawRow(upRow, y: 0, width: width, attributes: attributes)
 
         image.unlockFocus()
         image.isTemplate = false

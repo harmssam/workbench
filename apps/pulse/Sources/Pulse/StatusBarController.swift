@@ -3,7 +3,7 @@ import Combine
 import SwiftUI
 
 @MainActor
-final class StatusBarController: NSObject {
+final class StatusBarController: NSObject, NSPopoverDelegate {
     private let appState: AppState
     private let statusItem: NSStatusItem
     private let popover: NSPopover
@@ -11,6 +11,11 @@ final class StatusBarController: NSObject {
 
     private let popoverWidth: CGFloat = 320
     private let popoverHeight: CGFloat = 534
+
+    private var lastDisplayedDown = ""
+    private var lastDisplayedUp = ""
+    private var pendingDownload: UInt64?
+    private var pendingUpload: UInt64?
 
     init(appState: AppState) {
         self.appState = appState
@@ -20,7 +25,7 @@ final class StatusBarController: NSObject {
         configureStatusItem()
         configurePopover()
         bindAppState()
-        updateLabel(download: appState.downloadRate, upload: appState.uploadRate)
+        applyLabel(download: appState.downloadRate, upload: appState.uploadRate)
     }
 
     func teardown() {
@@ -44,6 +49,7 @@ final class StatusBarController: NSObject {
     private func configurePopover() {
         popover.behavior = .transient
         popover.animates = true
+        popover.delegate = self
         popover.contentSize = NSSize(width: popoverWidth, height: popoverHeight)
         popover.contentViewController = NSHostingController(
             rootView: PopoverView(appState: appState)
@@ -56,15 +62,41 @@ final class StatusBarController: NSObject {
             .combineLatest(appState.$uploadRate)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] download, upload in
-                self?.updateLabel(download: download, upload: upload)
+                self?.scheduleLabelUpdate(download: download, upload: upload)
             }
             .store(in: &cancellables)
     }
 
-    private func updateLabel(download: UInt64, upload: UInt64) {
-        guard let button = statusItem.button else { return }
+    private func scheduleLabelUpdate(download: UInt64, upload: UInt64) {
+        if popover.isShown {
+            pendingDownload = download
+            pendingUpload = upload
+            return
+        }
+        applyLabel(download: download, upload: upload)
+    }
 
-        button.image = MenuBarLabelRenderer.render(download: download, upload: upload)
+    private func applyLabel(download: UInt64, upload: UInt64) {
+        guard statusItem.button != nil else { return }
+
+        let down = ByteFormatter.formatMenuBarMbps(bytesPerSecond: download)
+        let up = ByteFormatter.formatMenuBarMbps(bytesPerSecond: upload)
+        guard down != lastDisplayedDown || up != lastDisplayedUp else { return }
+
+        lastDisplayedDown = down
+        lastDisplayedUp = up
+        statusItem.button?.image = MenuBarLabelRenderer.render(download: download, upload: upload)
+    }
+
+    private func flushPendingLabelUpdate() {
+        guard let download = pendingDownload, let upload = pendingUpload else { return }
+        pendingDownload = nil
+        pendingUpload = nil
+        applyLabel(download: download, upload: upload)
+    }
+
+    func popoverDidClose(_ notification: Notification) {
+        flushPendingLabelUpdate()
     }
 
     @objc private func togglePopover() {
@@ -77,6 +109,5 @@ final class StatusBarController: NSObject {
 
         NSApp.activate(ignoringOtherApps: true)
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-        popover.contentViewController?.view.window?.makeKey()
     }
 }

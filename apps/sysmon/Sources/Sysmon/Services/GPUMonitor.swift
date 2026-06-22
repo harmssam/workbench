@@ -2,9 +2,26 @@ import Foundation
 import IOKit
 
 actor GPUMonitor {
+    private var cachedProcesses: [GPUProcessActivity] = []
+    private var lastProcessSampleTime: Date?
+    private let processSampleInterval: TimeInterval = 3
+
     func sample() -> GPUSnapshot {
         let accelerators = readAccelerators()
         return GPUPerformanceParser.selectPrimary(from: accelerators) ?? .unavailable
+    }
+
+    func sampleProcesses(limit: Int = 5) -> [GPUProcessActivity] {
+        let now = Date()
+        if let lastSample = lastProcessSampleTime,
+           now.timeIntervalSince(lastSample) < processSampleInterval {
+            return cachedProcesses
+        }
+
+        let processes = GPUProcessEnumerator.collectProcesses(limit: limit)
+        cachedProcesses = processes
+        lastProcessSampleTime = now
+        return processes
     }
 
     private func readAccelerators() -> [ParsedAccelerator] {

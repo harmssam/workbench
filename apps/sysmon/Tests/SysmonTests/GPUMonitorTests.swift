@@ -38,6 +38,20 @@ struct GPUMonitorTests {
         #expect(parsed.memoryLabel == "VRAM")
     }
 
+    @Test("Parses GPU client PID from IOUserClientCreator")
+    func creatorPIDParsing() {
+        #expect(GPUProcessEnumerator.parsePID(from: "pid 452, WindowServer") == 452)
+        #expect(GPUProcessEnumerator.parsePID(from: "pid 944, Brave Browser He") == 944)
+        #expect(GPUProcessEnumerator.parsePID(from: "no pid here") == nil)
+    }
+
+    @Test("Parses GPU client name from IOUserClientCreator")
+    func creatorNameParsing() {
+        #expect(GPUProcessEnumerator.parseCreatorName(from: "pid 452, WindowServer") == "WindowServer")
+        #expect(GPUProcessEnumerator.parseCreatorName(from: "pid 465, runningboardd") == "runningboardd")
+        #expect(GPUProcessEnumerator.parseCreatorName(from: "pid 452") == nil)
+    }
+
     @Test("Selects the busiest accelerator")
     func primarySelection() {
         let low = ParsedAccelerator(

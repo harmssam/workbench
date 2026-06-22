@@ -9,6 +9,7 @@ final class AppState: ObservableObject {
     @Published var cpuUsage = CPUUsageSample.invalid
     @Published var cpuProcesses: [CPUProcessActivity] = []
     @Published var gpuSnapshot = GPUSnapshot.unavailable
+    @Published var gpuProcesses: [GPUProcessActivity] = []
     @Published var networkProcesses: [NetworkProcessActivity] = []
     @Published var diskProcesses: [ProcessActivity] = []
     @Published var isLoading = false
@@ -60,6 +61,7 @@ final class AppState: ObservableObject {
         async let networkProcesses = networkMonitor.sampleProcesses()
         async let diskProcesses = diskMonitor.sampleProcesses()
         async let cpuProcesses = cpuMonitor.sampleProcesses()
+        async let gpuProcesses = gpuMonitor.sampleProcesses()
 
         let rates = await networkRates
         let disk = await diskRates
@@ -72,6 +74,7 @@ final class AppState: ObservableObject {
         self.networkProcesses = await networkProcesses
         self.diskProcesses = await diskProcesses
         self.cpuProcesses = await cpuProcesses
+        self.gpuProcesses = await gpuProcesses
         updateHistories()
         isLoading = false
     }

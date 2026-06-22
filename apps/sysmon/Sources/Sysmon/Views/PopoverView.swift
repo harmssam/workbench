@@ -127,9 +127,19 @@ struct PopoverView: View {
             sparklines: gpu.isAvailable ? [
                 SparklineSpec(values: appState.gpuHistory, color: .indigo, label: "Utilization")
             ] : [],
-            columns: [],
-            rows: [],
-            emptyMessage: gpu.isAvailable ? nil : "GPU metrics unavailable on this system"
+            columns: [
+                MetricColumn(title: "Process", width: .flexible, alignment: .leading),
+                MetricColumn(title: "GPU", width: .fixed(52), alignment: .trailing),
+                MetricColumn(title: "Memory", width: .fixed(64), alignment: .trailing)
+            ],
+            rows: appState.gpuProcesses.map { process in
+                [
+                    process.name,
+                    PercentFormatter.formatDetailed(process.usage),
+                    ByteFormatter.formatBytes(process.memoryBytes)
+                ]
+            },
+            emptyMessage: gpu.isAvailable ? "No active GPU clients" : "GPU metrics unavailable on this system"
         )
     }
 

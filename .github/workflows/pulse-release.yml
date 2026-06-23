@@ -1,0 +1,53 @@
+name: Pulse Release
+
+on:
+  push:
+    tags:
+      - "pulse-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build and test
+        working-directory: apps/pulse
+        run: |
+          chmod +x build-app.sh scripts/generate-app-icon.sh
+          swift test
+          ./build-app.sh
+
+      - name: Package zip
+        working-directory: apps/pulse
+        run: |
+          VERSION="${GITHUB_REF_NAME#pulse-v}"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          ditto -c -k --sequesterRsrc --keepParent \
+            dist/Pulse.app \
+            "dist/Pulse-${VERSION}-macos-arm64.zip"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Pulse ${{ env.VERSION }}
+          files: apps/pulse/dist/Pulse-${{ env.VERSION }}-macos-arm64.zip
+          generate_release_notes: true
+          body: |
+            ## Install
+
+            1. Download `Pulse-${{ env.VERSION }}-macos-arm64.zip`
+            2. Unzip and drag **Pulse.app** to Applications
+            3. Open Pulse — if macOS blocks it, right-click → **Open** (first launch only)
+
+            ## Requirements
+
+            - macOS 14+
+            - Apple Silicon (arm64)
+
+            Built from tag `${{ github.ref_name }}`.

@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appState = AppState()
         self.appState = appState
         statusBarController = StatusBarController(appState: appState)
+        InstallPrompt.presentIfNeeded()
     }
 
     func applicationWillTerminate(_ notification: Notification) {

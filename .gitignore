@@ -34,6 +34,7 @@ target/
 # Swift / Xcode
 .build/
 apps/pulse/dist/
+apps/pulse/build/
 DerivedData/
 *.xcuserstate
 *.xcworkspace/xcuserdata/

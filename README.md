@@ -1,27 +1,41 @@
 # workbench
 
-Personal apps and scripts — separate from [Clevertech](https://github.com/harmssam/Clevertech_v1).
+A collection of macOS applications and utility scripts.
 
-Each project lives under `apps/` or `scripts/`. One-off utilities go in `scripts/`; anything with its own UI, lifecycle, or distribution story goes in `apps/`.
+Projects live under `apps/` (standalone applications with their own UI and distribution) or `scripts/` (focused command-line utilities and one-off tools).
 
 ## Structure
 
 ```
-apps/       # standalone applications (menu bar apps, CLIs with their own repo-style layout)
-scripts/    # one-off or utility scripts
-docs/       # cross-cutting notes (optional)
+apps/       # Menu bar apps, CLIs, and other distributable applications
+scripts/    # Utility scripts and small automation tools
+docs/       # Cross-cutting notes (optional)
 ```
 
-## Apps
+## Applications
 
-| App | Description | Status |
-|-----|-------------|--------|
-| [Pulse](apps/pulse/) | macOS menu bar network, disk, CPU, and GPU monitor | MVP |
+| App | Description | Version | Releases |
+|-----|-------------|---------|----------|
+| [Pulse](apps/pulse/) | Real-time network, disk, CPU, and GPU monitor for the menu bar | 0.1.2 | [Download](https://github.com/harmssam/workbench/releases) |
+
+### Pulse
+
+Install from [GitHub Releases](https://github.com/harmssam/workbench/releases) or build from source — see [apps/pulse/README.md](apps/pulse/README.md).
+
+```bash
+# Install a release build
+# 1. Download Pulse-v0.1.2-macos-arm64.zip from Releases
+# 2. Unzip and copy to Applications:
+cp -r Pulse.app /Applications/
+open /Applications/Pulse.app
+```
+
+New releases are built automatically when a `pulse-v*` tag is pushed.
 
 ## Requirements
 
-- macOS (primary target for GUI apps)
-- Per-app READMEs list language-specific tooling
+- macOS 14+ for GUI applications
+- Toolchain details are documented in each project's README
 
 ## License
 

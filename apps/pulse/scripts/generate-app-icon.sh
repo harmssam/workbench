@@ -7,6 +7,7 @@ ICONSET="$ROOT/build/AppIcon.iconset"
 OUTPUT="$ROOT/build/AppIcon.icns"
 SOURCE_PNG="$ROOT/build/icon-source.png"
 
+rm -rf "$ICONSET"
 mkdir -p "$ROOT/build" "$ICONSET"
 
 render_source_png() {

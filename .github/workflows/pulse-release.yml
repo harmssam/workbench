@@ -4,29 +4,43 @@ on:
   push:
     tags:
       - "pulse-v*"
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
   release:
-    runs-on: macos-14
+    runs-on: macos-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build and test
+      - name: Toolchain info
+        run: |
+          sw_vers
+          xcodebuild -version
+          swift --version
+
+      - name: Test
         working-directory: apps/pulse
         run: |
           chmod +x build-app.sh scripts/generate-app-icon.sh
+          rm -rf .build
           swift test
-          ./build-app.sh
+
+      - name: Build app bundle
+        working-directory: apps/pulse
+        run: ./build-app.sh
 
       - name: Package zip
         working-directory: apps/pulse
         run: |
           VERSION="${GITHUB_REF_NAME#pulse-v}"
+          if [[ "$VERSION" == "$GITHUB_REF_NAME" ]]; then
+            VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Sources/Pulse/Info.plist)"
+          fi
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           ditto -c -k --sequesterRsrc --keepParent \
             dist/Pulse.app \
@@ -35,6 +49,7 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.ref_name }}
           name: Pulse ${{ env.VERSION }}
           files: apps/pulse/dist/Pulse-${{ env.VERSION }}-macos-arm64.zip
           generate_release_notes: true

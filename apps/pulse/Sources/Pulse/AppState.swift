@@ -64,6 +64,9 @@ final class AppState: ObservableObject {
     @Published var updateFailed = false
 
     private var updateTask: Task<Void, Never>?
+    private var lastUpdateCheck: Date?
+    private let updateCheckInterval: TimeInterval = 3600
+    private let updateCheckThrottle: TimeInterval = 15 * 60
 
     @Published var autoUpdateEnabled: Bool = UserDefaults.standard.bool(forKey: "autoUpdateEnabled") {
         didSet {
@@ -206,24 +209,26 @@ final class AppState: ObservableObject {
 
         updateCheckTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(4 * 3600))
+                try? await Task.sleep(for: .seconds(self?.updateCheckInterval ?? 3600))
                 self?.checkForUpdates()
             }
         }
     }
 
+    func checkForUpdatesIfStale(force: Bool = false) {
+        if !force,
+           let lastUpdateCheck,
+           Date().timeIntervalSince(lastUpdateCheck) < updateCheckThrottle {
+            return
+        }
+        checkForUpdates()
+    }
+
     func checkForUpdates() {
+        lastUpdateCheck = Date()
         AppLogger.info("Checking for updates...", category: AppLogger.update)
         Task {
             if let update = await updateManager.checkForUpdate() {
-                let runtimeVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
-                if update.version == runtimeVersion {
-                    AppLogger.info("Latest version matches current (\(runtimeVersion)), not offering update", category: AppLogger.update)
-                    await MainActor.run {
-                        self.availableUpdate = nil
-                    }
-                    return
-                }
                 AppLogger.info("New version found: \(update.version)", category: AppLogger.update)
                 await MainActor.run {
                     self.availableUpdate = update

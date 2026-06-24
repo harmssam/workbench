@@ -115,6 +115,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         }
 
         NSApp.activate(ignoringOtherApps: true)
+        appState.checkForUpdatesIfStale()
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
     }
 }

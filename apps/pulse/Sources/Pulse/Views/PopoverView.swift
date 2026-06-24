@@ -449,11 +449,16 @@ struct PopoverView: View {
             .onHover { isQuitHovered = $0 }
             .help("Quit Pulse (⌘Q)")
 
-            let version = AppState.currentAppVersion
-            Text("v\(version)")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-                .monospacedDigit()
+            Button {
+                appState.checkForUpdatesIfStale(force: true)
+            } label: {
+                Text("v\(AppState.currentAppVersion)")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .monospacedDigit()
+            }
+            .buttonStyle(.borderless)
+            .help("Check for updates")
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)

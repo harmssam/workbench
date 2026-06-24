@@ -26,9 +26,9 @@ actor FanMonitor {
 
             fans.append(Fan(
                 id: i,
-                currentRPM: rpm,
-                minRPM: minR,
-                maxRPM: maxR
+                currentRPM: SafeNumeric.sanitized(rpm),
+                minRPM: minR.map { SafeNumeric.sanitized($0) },
+                maxRPM: maxR.map { SafeNumeric.sanitized($0) }
             ))
         }
 

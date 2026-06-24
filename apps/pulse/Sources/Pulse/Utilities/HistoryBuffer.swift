@@ -9,6 +9,7 @@ struct HistoryBuffer: Sendable {
     }
 
     mutating func append(_ value: Double) {
+        guard value.isFinite else { return }
         values.append(max(0, value))
         if values.count > capacity {
             values.removeFirst(values.count - capacity)

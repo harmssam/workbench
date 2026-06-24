@@ -55,7 +55,7 @@ final class AppState: ObservableObject {
            !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return v.trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        return "0.2.8"
+        return "0.2.9"
     }
     @Published var availableUpdate: AppUpdate?
     @Published var isDownloadingUpdate = false
@@ -83,6 +83,8 @@ final class AppState: ObservableObject {
         }
     }
 
+    @Published var isPopoverShown = false
+
     @Published var metricCardOrder: [MetricCardKind] = MetricCardKind.loadSavedOrder() {
         didSet {
             MetricCardKind.saveOrder(metricCardOrder)
@@ -108,8 +110,8 @@ final class AppState: ObservableObject {
         let up = ByteFormatter.formatMenuBarMbps(bytesPerSecond: uploadRate)
         let cpu = cpuUsage.isValid ? PercentFormatter.format(cpuUsage.total) : "—"
         var base = "↓\(down) ↑\(up) Mbps · CPU \(cpu)"
-        if let t = tempSnapshot.cpuTemperature {
-            base += " · \(Int(round(t)))°C"
+        if let t = tempSnapshot.cpuTemperature, t.isFinite {
+            base += " · \(SafeNumeric.roundedInt(t))°C"
         }
         if memorySnapshot.isValid {
             base += " · Free \(ByteFormatter.formatBytes(memorySnapshot.free))"
@@ -158,13 +160,20 @@ final class AppState: ObservableObject {
         CrashReporter.breadcrumb("AppState.refresh: fanMonitor")
         fanSnapshot = await fanMonitor.sample()
         CrashReporter.breadcrumb("AppState.refresh: fanMonitor done")
+        CrashReporter.breadcrumb("AppState.refresh: networkProcesses")
         self.networkProcesses = await networkProcesses
+        CrashReporter.breadcrumb("AppState.refresh: diskProcesses")
         self.diskProcesses = await diskProcesses
+        CrashReporter.breadcrumb("AppState.refresh: cpuProcesses")
         self.cpuProcesses = await cpuProcesses
+        CrashReporter.breadcrumb("AppState.refresh: gpuProcesses")
         self.gpuProcesses = await gpuProcesses
+        CrashReporter.breadcrumb("AppState.refresh: memorySnapshot")
         self.memorySnapshot = await memorySnapshot
         self.memoryProcesses = await memoryProcesses
+        CrashReporter.breadcrumb("AppState.refresh: updateHistories")
         updateHistories()
+        CrashReporter.breadcrumb("AppState.refresh: complete")
     }
 
     private func updateHistories() {

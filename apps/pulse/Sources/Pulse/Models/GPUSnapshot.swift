@@ -83,7 +83,7 @@ enum GPUPerformanceParser {
     }
 
     static func percentValue(_ value: Any?) -> Double? {
-        guard let number = numericValue(value) else { return nil }
+        guard let number = numericValue(value), number.isFinite else { return nil }
         let clamped = min(max(number, 0), 100)
         return clamped / 100
     }

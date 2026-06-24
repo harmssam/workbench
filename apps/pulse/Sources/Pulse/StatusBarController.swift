@@ -102,7 +102,12 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         applyLabel(download: download, upload: upload)
     }
 
+    func popoverWillShow(_ notification: Notification) {
+        appState.isPopoverShown = true
+    }
+
     func popoverDidClose(_ notification: Notification) {
+        appState.isPopoverShown = false
         flushPendingLabelUpdate()
     }
 

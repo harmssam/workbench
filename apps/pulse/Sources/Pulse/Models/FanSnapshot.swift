@@ -13,9 +13,9 @@ struct Fan: Sendable, Identifiable {
     }
 
     var formatted: String {
-        let rpm = Int(currentRPM.rounded())
-        if let pct = percentage {
-            return "\(rpm) RPM (\(Int(pct.rounded()))%)"
+        let rpm = SafeNumeric.roundedInt(currentRPM)
+        if let pct = percentage, pct.isFinite {
+            return "\(rpm) RPM (\(SafeNumeric.roundedInt(pct))%)"
         }
         return "\(rpm) RPM"
     }

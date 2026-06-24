@@ -3,6 +3,7 @@ import AppKit
 
 struct FanAnimation: View {
     let fan: Fan
+    var isActive: Bool = true
 
     private static let templatedFanImage: NSImage? = {
         if let image = Bundle.module.image(forResource: "fan") {
@@ -15,7 +16,7 @@ struct FanAnimation: View {
     @State private var rotation: Double = 0
     @State private var spinBoost: Double = 0
     @State private var eggRotation: Double = 0
-    @State private var isAnimating = false
+
 
     private var effectiveRPM: Double {
         let normalized = min(Double(fan.currentRPM) / 5200.0, 1.8)
@@ -73,15 +74,13 @@ struct FanAnimation: View {
                 .lineLimit(1)
 
             // RPM
-            Text("\(Int(fan.currentRPM))")
+            Text("\(SafeNumeric.roundedInt(fan.currentRPM))")
                 .font(.system(size: 8, weight: .medium, design: .monospaced))
                 .foregroundStyle(.orange)
                 .lineLimit(1)
         }
-        .onAppear { isAnimating = true }
-        .onDisappear { isAnimating = false }
         .onReceive(timer) { _ in
-            guard isAnimating else { return }
+            guard isActive else { return }
             updateRotation()
         }
     }

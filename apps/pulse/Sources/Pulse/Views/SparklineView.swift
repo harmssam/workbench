@@ -5,6 +5,13 @@ struct SparklineView: View {
     let color: Color
     var label: String? = nil
 
+    private var drawableValues: [Double] {
+        values.map { value in
+            guard value.isFinite else { return 0 }
+            return max(0, value)
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             if let label {
@@ -17,18 +24,23 @@ struct SparklineView: View {
                 let background = RoundedRectangle(cornerRadius: 4)
                 context.fill(background.path(in: CGRect(origin: .zero, size: size)), with: .color(color.opacity(0.08)))
 
-                guard values.count >= 2 else { return }
+                let samples = drawableValues
+                guard samples.count >= 2 else { return }
 
-                let peak = max(values.max() ?? 0, 0.001)
-                let stepX = size.width / CGFloat(values.count - 1)
+                let peak = max(samples.max() ?? 0, 0.001)
+                let stepX = size.width / CGFloat(samples.count - 1)
                 var points: [CGPoint] = []
 
-                for index in values.indices {
+                for index in samples.indices {
                     let x = CGFloat(index) * stepX
-                    let normalized = CGFloat(values[index] / peak)
+                    let normalized = CGFloat(samples[index] / peak)
+                    guard normalized.isFinite, x.isFinite else { continue }
                     let y = size.height - (normalized * (size.height - 4)) - 2
+                    guard y.isFinite else { continue }
                     points.append(CGPoint(x: x, y: y))
                 }
+
+                guard points.count >= 2 else { return }
 
                 var area = Path()
                 area.move(to: CGPoint(x: points[0].x, y: size.height))
@@ -59,9 +71,8 @@ struct SparklineView: View {
             }
             .frame(height: 28)
             .frame(maxWidth: .infinity)
-            .drawingGroup()
             .overlay {
-                if values.count < 2 {
+                if drawableValues.count < 2 {
                     Text("…")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)

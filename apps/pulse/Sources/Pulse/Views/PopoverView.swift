@@ -27,7 +27,7 @@ struct PopoverView: View {
     private var updateStatusLabel: String {
         if let status = appState.updateStatus {
             if appState.updateProgress > 0, status.hasPrefix("Downloading") {
-                let percent = Int((appState.updateProgress * 100).rounded())
+                let percent = SafeNumeric.roundedInt(appState.updateProgress * 100)
                 return "Downloading \(percent)%"
             }
             return status
@@ -100,9 +100,13 @@ struct PopoverView: View {
 
     private var cardScroller: some View {
         ScrollView(.vertical, showsIndicators: true) {
-            LazyVStack(spacing: 12) {
-                ForEach(appState.metricCardOrder) { kind in
-                    reorderableSection(for: kind)
+            Group {
+                if appState.isPopoverShown {
+                    LazyVStack(spacing: 12) {
+                        ForEach(appState.metricCardOrder) { kind in
+                            reorderableSection(for: kind)
+                        }
+                    }
                 }
             }
             .padding(12)
@@ -315,12 +319,12 @@ struct PopoverView: View {
         let summary: [SummaryItem] = [
             SummaryItem(
                 label: "CPU",
-                value: t.cpuTemperature.map { "\(Int(round($0)))°C" } ?? "—",
+                value: t.cpuTemperature.map { "\(SafeNumeric.roundedInt($0))°C" } ?? "—",
                 tint: .orange
             ),
             SummaryItem(
                 label: "GPU",
-                value: t.gpuTemperature.map { "\(Int(round($0)))°C" } ?? "—",
+                value: t.gpuTemperature.map { "\(SafeNumeric.roundedInt($0))°C" } ?? "—",
                 tint: .orange.opacity(0.75)
             )
         ]
@@ -335,7 +339,7 @@ struct PopoverView: View {
         let fanContent: AnyView? = f.isAvailable ? AnyView(
             HStack(spacing: 14) {
                 ForEach(f.fans) { fan in
-                    FanAnimation(fan: fan)
+                    FanAnimation(fan: fan, isActive: appState.isPopoverShown)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .center)

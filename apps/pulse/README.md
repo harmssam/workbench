@@ -4,6 +4,8 @@ A lightweight macOS menu bar monitor for network, disk, CPU, GPU, temperature, a
 
 **Current release: v0.2.4**
 
+![Screenshot](images/screenshot.png)
+
 ## Features
 
 - Compact Mbps readout in the menu bar

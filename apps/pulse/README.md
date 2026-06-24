@@ -4,7 +4,9 @@ A lightweight macOS menu bar monitor for network, disk, CPU, GPU, temperature, a
 
 **Current release: v0.2.4**
 
-![Screenshot](images/screenshot.png)
+<div align="center">
+  <img src="images/screenshot.png" width="650" />
+</div>
 
 ## Features
 
@@ -12,10 +14,7 @@ A lightweight macOS menu bar monitor for network, disk, CPU, GPU, temperature, a
 - Popover dashboard with per-metric sparklines and a "Thermal" card (CPU/GPU temps + animated fan icons)
 - Top active processes for network, disk, CPU, and GPU
 - Fan icons animate with real RPM (rotation speed + motion blur)
-- Optional auto-update (disabled by default) — toggle in the top-right of the popover; can fully download + install hands-free
-- Protected Quit button (icon + requires ⌘Q or click; Space does not quit)
-- Install-location check with guidance when not run from `/Applications`
-- No root privileges, no third-party runtime dependencies
+- Optional auto-update (disabled by default) — toggle in the top-right of the popover
 
 ## Requirements
 

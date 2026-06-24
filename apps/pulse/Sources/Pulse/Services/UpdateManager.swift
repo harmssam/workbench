@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 struct AppUpdate: Sendable, Equatable {
     let version: String
@@ -16,6 +17,7 @@ actor UpdateManager {
     }
 
     func checkForUpdate() async -> AppUpdate? {
+        AppLogger.info("Querying GitHub for latest release...", category: AppLogger.update)
         let url = URL(string: "https://api.github.com/repos/\(repoOwner)/\(repoName)/releases/latest")!
         var request = URLRequest(url: url)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
@@ -23,33 +25,53 @@ actor UpdateManager {
 
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
-            guard (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+            guard let httpResponse = response as? HTTPURLResponse else {
+                AppLogger.error("Non-HTTP response from GitHub", category: AppLogger.update)
+                return nil
+            }
+            
+            guard httpResponse.statusCode == 200 else {
+                AppLogger.error("GitHub returned status \(httpResponse.statusCode)", category: AppLogger.update)
+                return nil
+            }
 
             let decoder = JSONDecoder()
             let release = try decoder.decode(GitHubRelease.self, from: data)
 
             let version = release.tag_name.replacingOccurrences(of: "pulse-v", with: "")
-            guard isNewer(version, than: currentVersion) else { return nil }
+            AppLogger.info("Latest tag: \(release.tag_name) (parsed \(version))", category: AppLogger.update)
+            
+            guard isNewer(version, than: currentVersion) else {
+                AppLogger.info("Current version \(currentVersion) is up to date", category: AppLogger.update)
+                return nil
+            }
 
             // Find the arm64 zip asset
             guard let asset = release.assets.first(where: {
                 $0.name.lowercased().contains("arm64") && $0.name.hasSuffix(".zip")
-            }) else { return nil }
+            }) else {
+                AppLogger.error("No suitable arm64 zip found in release assets", category: AppLogger.update)
+                return nil
+            }
 
+            AppLogger.info("Found update asset: \(asset.name)", category: AppLogger.update)
             return AppUpdate(
                 version: version,
                 downloadURL: asset.browser_download_url,
                 releaseURL: URL(string: release.html_url)!
             )
         } catch {
-            // Silently fail for now (rate limits, no internet, etc.)
+            AppLogger.error("Failed to check for update: \(error)", category: AppLogger.update)
             return nil
         }
     }
 
     private func isNewer(_ remote: String, than local: String) -> Bool {
-        let remoteParts = remote.split(separator: ".").map { Int($0) ?? 0 }
-        let localParts = local.split(separator: ".").map { Int($0) ?? 0 }
+        let cleanRemote = remote.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "v", with: "", options: .caseInsensitive)
+        let cleanLocal = local.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "v", with: "", options: .caseInsensitive)
+        
+        let remoteParts = cleanRemote.split(separator: ".").map { Int($0) ?? 0 }
+        let localParts = cleanLocal.split(separator: ".").map { Int($0) ?? 0 }
 
         let maxCount = max(remoteParts.count, localParts.count)
         for i in 0..<maxCount {

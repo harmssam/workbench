@@ -1,4 +1,5 @@
 import AppKit
+import OSLog
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -6,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusBarController: StatusBarController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        AppLogger.info("Pulse launched (version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] ?? "unknown"))", category: AppLogger.general)
         terminateDuplicateInstances()
         NSApp.setActivationPolicy(.accessory)
 
@@ -16,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        AppLogger.info("Pulse is terminating", category: AppLogger.general)
         statusBarController?.teardown()
     }
 

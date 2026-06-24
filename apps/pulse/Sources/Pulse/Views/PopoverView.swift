@@ -279,11 +279,25 @@ struct PopoverView: View {
 
     private var footer: some View {
         HStack {
-            Text(appState.lastError ?? "Updates every second")
-                .font(.caption2)
-                .foregroundStyle(appState.lastError == nil ? Color.secondary : Color.red)
-                .lineLimit(1)
+            if let error = appState.lastError {
+                Text(error)
+                    .font(.caption2)
+                    .foregroundStyle(Color.red)
+                    .lineLimit(1)
+            }
+
             Spacer()
+
+            Button("Logs") {
+                if let url = try? FileManager.default.url(for: .libraryDirectory, in: .userDomainMask, appropriateFor: nil, create: false) {
+                    let logURL = url.appendingPathComponent("Logs/Pulse/pulse.log")
+                    NSWorkspace.shared.selectFile(logURL.path, inFileViewerRootedAtPath: "")
+                }
+            }
+            .buttonStyle(.borderless)
+            .font(.caption2)
+            .help("Open Pulse log file")
+
             Button {
                 NSApplication.shared.terminate(nil)
             } label: {
@@ -296,6 +310,12 @@ struct PopoverView: View {
             .keyboardShortcut("q", modifiers: .command)
             .focusable(false)
             .help("Quit Pulse (⌘Q)")
+
+            let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.2.1"
+            Text("v\(version)")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .monospacedDigit()
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)

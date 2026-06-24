@@ -2,14 +2,16 @@
 
 A lightweight macOS menu bar monitor for network, disk, CPU, GPU, temperature, and fan activity.
 
-**Current release: v0.2.1**
+**Current release: v0.2.2**
 
 ## Features
 
 - Compact Mbps readout in the menu bar
-- Popover dashboard with per-metric sparklines
+- Popover dashboard with per-metric sparklines and a "Thermal" card (CPU/GPU temps + animated fan icons)
 - Top active processes for network, disk, CPU, and GPU
-- CPU/GPU temperature and fan speed monitoring (with animated icons)
+- Fan icons animate with real RPM (rotation speed + motion blur)
+- Optional auto-update (disabled by default) — toggle in the top-right of the popover; can fully download + install hands-free
+- Protected Quit button (icon + requires ⌘Q or click; Space does not quit)
 - Install-location check with guidance when not run from `/Applications`
 - No root privileges, no third-party runtime dependencies
 
@@ -79,10 +81,10 @@ swift test
 
 ```bash
 chmod +x scripts/release.sh
-./scripts/release.sh 0.1.2
+./scripts/release.sh 0.2.1
 ```
 
-This creates and pushes a `pulse-v0.1.2` tag. GitHub Actions builds the app, packages a zip, and publishes the release.
+This creates and pushes a `pulse-v0.2.1` tag. GitHub Actions builds the app, packages a zip, and publishes the release.
 
 ## Architecture
 
@@ -91,8 +93,15 @@ NSStatusItem + NSPopover (SwiftUI)
 ├── NetworkMonitor  → netstat -ib, nettop -P
 ├── DiskMonitor     → ioreg, proc_pid_rusage
 ├── CPUMonitor      → host_statistics, ps
-└── GPUMonitor      → IOKit IOAccelerator
+├── GPUMonitor      → IOKit IOAccelerator
+├── TempMonitor     → AppleSMC via IOKit
+├── FanMonitor      → AppleSMC via IOKit
+└── UpdateManager   → GitHub Releases API (opt-in auto-update)
 ```
+
+The **Thermal** card combines live CPU/GPU temperatures with animated fan icons (rotation + blur scale with actual RPM).
+
+The header shows a small **auto-update toggle** at the far right (disabled by default). When enabled, new releases download and install automatically.
 
 ## Further reading
 

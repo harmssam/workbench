@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import OSLog
 
 @MainActor
 final class AppState: ObservableObject {
@@ -34,7 +35,8 @@ final class AppState: ObservableObject {
     let fanMonitor = FanMonitor()
 
     private let updateManager = UpdateManager(
-        currentVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
+        currentVersion: (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? "0.2.1"
     )
     @Published var availableUpdate: AppUpdate?
     @Published var isDownloadingUpdate = false
@@ -159,13 +161,31 @@ final class AppState: ObservableObject {
     }
 
     func checkForUpdates() {
+        AppLogger.info("Checking for updates...", category: AppLogger.update)
         Task {
             if let update = await updateManager.checkForUpdate() {
+                let runtimeVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
+                if update.version == runtimeVersion {
+                    AppLogger.info("Latest version matches current (\(runtimeVersion)), not offering update", category: AppLogger.update)
+                    await MainActor.run {
+                        self.availableUpdate = nil
+                    }
+                    return
+                }
+                AppLogger.info("New version found: \(update.version)", category: AppLogger.update)
                 await MainActor.run {
                     self.availableUpdate = update
                     if self.autoUpdateEnabled {
+                        AppLogger.info("Auto-update is enabled — starting update automatically", category: AppLogger.update)
                         self.startUpdate()
+                    } else {
+                        AppLogger.info("Auto-update is disabled — showing manual update button", category: AppLogger.update)
                     }
+                }
+            } else {
+                AppLogger.info("No update available", category: AppLogger.update)
+                await MainActor.run {
+                    self.availableUpdate = nil
                 }
             }
         }
@@ -174,6 +194,7 @@ final class AppState: ObservableObject {
     func startUpdate() {
         guard let update = availableUpdate, !isDownloadingUpdate else { return }
 
+        AppLogger.info("Starting update to v\(update.version)", category: AppLogger.update)
         isDownloadingUpdate = true
         updateStatus = "Downloading v\(update.version)..."
         updateProgress = 0
@@ -181,11 +202,13 @@ final class AppState: ObservableObject {
         Task {
             do {
                 let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("PulseUpdate-\(UUID().uuidString)")
+                AppLogger.info("Using temp dir: \(tempDir.path)", category: AppLogger.update)
                 try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
 
                 let zipURL = tempDir.appendingPathComponent("Pulse.zip")
 
                 // Download with progress
+                AppLogger.info("Downloading from \(update.downloadURL)", category: AppLogger.update)
                 let (bytes, response) = try await URLSession.shared.bytes(from: update.downloadURL)
                 var received: Int64 = 0
                 var data = Data()
@@ -193,12 +216,15 @@ final class AppState: ObservableObject {
                 if let httpResponse = response as? HTTPURLResponse,
                    let contentLength = httpResponse.value(forHTTPHeaderField: "Content-Length"),
                    let total = Int64(contentLength) {
+                    AppLogger.info("Download size: \(total) bytes", category: AppLogger.update)
                     for try await byte in bytes {
                         data.append(byte)
                         received += 1
-                        let progress = Double(received) / Double(total)
-                        await MainActor.run {
-                            self.updateProgress = progress
+                        if received % (total / 20 + 1) == 0 {  // Throttle progress updates
+                            let progress = Double(received) / Double(total)
+                            await MainActor.run {
+                                self.updateProgress = progress
+                            }
                         }
                     }
                 } else {
@@ -207,6 +233,7 @@ final class AppState: ObservableObject {
                     }
                 }
 
+                AppLogger.info("Writing zip to \(zipURL.path)", category: AppLogger.update)
                 try data.write(to: zipURL)
 
                 await MainActor.run {
@@ -214,6 +241,7 @@ final class AppState: ObservableObject {
                 }
 
                 // Unzip
+                AppLogger.info("Running unzip...", category: AppLogger.update)
                 let unzip = Process()
                 unzip.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
                 unzip.arguments = ["-o", zipURL.path, "-d", tempDir.path]
@@ -222,8 +250,11 @@ final class AppState: ObservableObject {
 
                 let newAppURL = tempDir.appendingPathComponent("Pulse.app")
                 guard FileManager.default.fileExists(atPath: newAppURL.path) else {
+                    AppLogger.error("Extracted app not found at \(newAppURL.path)", category: AppLogger.update)
                     throw NSError(domain: "Update", code: 1, userInfo: [NSLocalizedDescriptionKey: "Extracted app not found"])
                 }
+
+                AppLogger.info("Update package ready at \(newAppURL.path)", category: AppLogger.update)
 
                 await MainActor.run {
                     self.updateStatus = "Ready to install"
@@ -232,6 +263,7 @@ final class AppState: ObservableObject {
                     self.performUpdateInstall(newAppURL: newAppURL)
                 }
             } catch {
+                AppLogger.error("Update failed: \(error)", category: AppLogger.update)
                 await MainActor.run {
                     self.updateStatus = "Update failed: \(error.localizedDescription)"
                     self.isDownloadingUpdate = false
@@ -242,21 +274,26 @@ final class AppState: ObservableObject {
 
     private func performUpdateInstall(newAppURL: URL) {
         let currentAppURL = Bundle.main.bundleURL
+        AppLogger.info("Preparing to replace app at \(currentAppURL.path) with \(newAppURL.path)", category: AppLogger.update)
 
-        // Build a detached script to replace after we quit
+        // Safer approach: launch the new app first, then quit and let a background process clean up
+        // This reduces the chance of the running bundle being deleted while still executing code.
         let script = """
-        (sleep 1.5; \
+        (sleep 1; \
+        open -a "\(newAppURL.path)"; \
+        sleep 2; \
         rm -rf "\(currentAppURL.path)"; \
-        mv "\(newAppURL.path)" "\(currentAppURL.path)"; \
-        open "\(currentAppURL.path)"
+        mv "\(newAppURL.path)" "\(currentAppURL.path)"
         ) &
         """
 
+        AppLogger.info("Spawning cleanup script...", category: AppLogger.update)
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/bin/bash")
         task.arguments = ["-c", script]
         try? task.run()
 
+        AppLogger.info("Terminating current instance for update", category: AppLogger.update)
         // Quit this instance
         NSApp.terminate(nil)
     }

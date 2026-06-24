@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 actor TempMonitor {
     private let smc = SMC()
@@ -30,7 +31,10 @@ actor TempMonitor {
 
     func sample() -> TempSnapshot {
         smc.connectIfNeeded()
-        guard smc.isConnected else { return .unavailable }
+        guard smc.isConnected else {
+            AppLogger.error("SMC not connected for temperature reading", category: AppLogger.monitor)
+            return .unavailable
+        }
 
         let cpu = readMaxTemperature(from: cpuKeys)
         let gpu = readMaxTemperature(from: gpuKeys)
@@ -40,6 +44,7 @@ actor TempMonitor {
         let gpuC = gpu.flatMap { (20.0...130.0).contains($0) ? $0 : nil }
 
         if cpuC == nil && gpuC == nil {
+            AppLogger.info("No valid temperature readings from SMC", category: AppLogger.monitor)
             return .unavailable
         }
         return TempSnapshot(cpuTemperature: cpuC, gpuTemperature: gpuC)

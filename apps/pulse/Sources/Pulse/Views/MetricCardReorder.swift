@@ -9,9 +9,10 @@ struct CardGrabber: View {
 
     var body: some View {
         Image(systemName: "line.3.horizontal")
-            .font(.caption2.weight(.semibold))
+            .font(.caption2)
             .foregroundStyle(isHovered ? .secondary : .tertiary)
-            .frame(width: 16, height: 28)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 2)
             .contentShape(Rectangle())
             .onHover { hovering in
                 isHovered = hovering

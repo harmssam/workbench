@@ -109,38 +109,36 @@ struct PopoverView: View {
     }
 
     private func reorderableSection(for kind: MetricCardKind) -> some View {
-        HStack(alignment: .top, spacing: 6) {
-            CardGrabber(kind: kind, dragging: $draggingCard)
-            cardContent(for: kind)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .opacity(draggingCard == kind ? 0.55 : 1)
-        .onDrop(
-            of: [.plainText],
-            delegate: MetricCardReorderDelegate(
-                card: kind,
-                order: $appState.metricCardOrder,
-                dragging: $draggingCard
+        let grabber = CardGrabber(kind: kind, dragging: $draggingCard)
+        return cardContent(for: kind, grabber: AnyView(grabber))
+            .opacity(draggingCard == kind ? 0.55 : 1)
+            .onDrop(
+                of: [.plainText],
+                delegate: MetricCardReorderDelegate(
+                    card: kind,
+                    order: $appState.metricCardOrder,
+                    dragging: $draggingCard
+                )
             )
-        )
     }
 
     @ViewBuilder
-    private func cardContent(for kind: MetricCardKind) -> some View {
+    private func cardContent(for kind: MetricCardKind, grabber: AnyView) -> some View {
         switch kind {
-        case .network: networkCard
-        case .disk: diskCard
-        case .cpu: cpuCard
-        case .gpu: gpuCard
-        case .memory: memoryCard
-        case .thermal: tempCard
+        case .network: networkCard(grabber: grabber)
+        case .disk: diskCard(grabber: grabber)
+        case .cpu: cpuCard(grabber: grabber)
+        case .gpu: gpuCard(grabber: grabber)
+        case .memory: memoryCard(grabber: grabber)
+        case .thermal: tempCard(grabber: grabber)
         }
     }
 
-    private var networkCard: some View {
+    private func networkCard(grabber: AnyView) -> some View {
         MetricCard(
             title: "Network",
             icon: "network",
+            trailingHeader: grabber,
             summary: [
                 SummaryItem(label: "Download", value: "\(ByteFormatter.formatMbps(bytesPerSecond: appState.downloadRate)) Mbps", tint: .blue),
                 SummaryItem(label: "Upload", value: "\(ByteFormatter.formatMbps(bytesPerSecond: appState.uploadRate)) Mbps", tint: .green)
@@ -165,10 +163,11 @@ struct PopoverView: View {
         )
     }
 
-    private var cpuCard: some View {
+    private func cpuCard(grabber: AnyView) -> some View {
         MetricCard(
             title: "CPU",
             icon: "cpu",
+            trailingHeader: grabber,
             summary: [
                 SummaryItem(
                     label: "Total",
@@ -200,13 +199,14 @@ struct PopoverView: View {
         )
     }
 
-    private var gpuCard: some View {
+    private func gpuCard(grabber: AnyView) -> some View {
         let gpu = appState.gpuSnapshot
 
         return MetricCard(
             title: "GPU",
             icon: "display",
             subtitle: gpu.isAvailable ? gpu.name : nil,
+            trailingHeader: grabber,
             summary: gpuSummaryItems(for: gpu),
             sparklines: gpu.isAvailable ? [
                 SparklineSpec(values: appState.gpuHistory, color: .indigo, label: "Utilization")
@@ -225,13 +225,14 @@ struct PopoverView: View {
         )
     }
 
-    private var memoryCard: some View {
+    private func memoryCard(grabber: AnyView) -> some View {
         let mem = appState.memorySnapshot
         guard mem.isValid else {
             return AnyView(
                 MetricCard(
                     title: "Memory",
                     icon: "memorychip",
+                    trailingHeader: grabber,
                     summary: [SummaryItem(label: "Status", value: "Unavailable", tint: .secondary)],
                     sparklines: [],
                     columns: [],
@@ -260,6 +261,7 @@ struct PopoverView: View {
         let card = MetricCard(
             title: "Memory (\(totalDisplay))",
             icon: "memorychip",
+            trailingHeader: grabber,
             summary: [
                 SummaryItem(label: "Used", value: usedStr, tint: .purple),
                 SummaryItem(label: "Free", value: freeStr, tint: .purple),
@@ -302,7 +304,7 @@ struct PopoverView: View {
         )
     }
 
-    private var tempCard: some View {
+    private func tempCard(grabber: AnyView) -> some View {
         let t = appState.tempSnapshot
         let f = appState.fanSnapshot
 
@@ -339,6 +341,7 @@ struct PopoverView: View {
         return MetricCard(
             title: "Thermal",
             icon: "thermometer",
+            trailingHeader: grabber,
             summary: summary,
             sparklines: sparklines,
             columns: [],
@@ -381,10 +384,11 @@ struct PopoverView: View {
         return items
     }
 
-    private var diskCard: some View {
+    private func diskCard(grabber: AnyView) -> some View {
         MetricCard(
             title: "Disk",
             icon: "internaldrive",
+            trailingHeader: grabber,
             summary: [
                 SummaryItem(label: "Read", value: ByteFormatter.formatRate(bytesPerSecond: appState.diskReadRate), tint: .orange),
                 SummaryItem(label: "Write", value: ByteFormatter.formatRate(bytesPerSecond: appState.diskWriteRate), tint: .purple)
@@ -500,11 +504,13 @@ private struct MetricCard: View {
     let rows: [[String]]
     let emptyMessage: String?
     let afterSparklines: AnyView?
+    let trailingHeader: AnyView?
 
     init(
         title: String,
         icon: String,
         subtitle: String? = nil,
+        trailingHeader: AnyView? = nil,
         summary: [SummaryItem],
         sparklines: [SparklineSpec] = [],
         columns: [MetricColumn],
@@ -515,6 +521,7 @@ private struct MetricCard: View {
         self.title = title
         self.icon = icon
         self.subtitle = subtitle
+        self.trailingHeader = trailingHeader
         self.summary = summary
         self.sparklines = sparklines
         self.columns = columns
@@ -525,7 +532,7 @@ private struct MetricCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
+            HStack(alignment: .center, spacing: 8) {
                 RoundedRectangle(cornerRadius: 2)
                     .fill(accentColor)
                     .frame(width: 3, height: 28)
@@ -539,6 +546,12 @@ private struct MetricCard: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
+                }
+
+                Spacer(minLength: 4)
+
+                if let trailingHeader {
+                    trailingHeader
                 }
             }
 

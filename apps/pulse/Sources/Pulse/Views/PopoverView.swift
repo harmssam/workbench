@@ -1,13 +1,15 @@
 import AppKit
 import SwiftUI
 
+enum PopoverLayout {
+    static let width: CGFloat = 340
+    static let scrollHeight: CGFloat = 490
+}
+
 struct PopoverView: View {
     @ObservedObject var appState: AppState
     @State private var draggingCard: MetricCardKind?
     @State private var isQuitHovered = false
-
-    private let popoverWidth: CGFloat = 340
-    private let scrollHeight: CGFloat = 490
 
     var body: some View {
         VStack(spacing: 0) {
@@ -17,7 +19,8 @@ struct PopoverView: View {
             Divider()
             footer
         }
-        .frame(width: popoverWidth, height: 604)
+        .frame(width: PopoverLayout.width)
+        .fixedSize(horizontal: false, vertical: true)
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
@@ -103,9 +106,10 @@ struct PopoverView: View {
                 }
             }
             .padding(12)
-            .frame(width: popoverWidth)
+            .frame(width: PopoverLayout.width)
         }
-        .frame(width: popoverWidth, height: scrollHeight, alignment: .top)
+        .frame(width: PopoverLayout.width, height: PopoverLayout.scrollHeight, alignment: .top)
+        .background(AlwaysVisibleScrollBar())
     }
 
     private func reorderableSection(for kind: MetricCardKind) -> some View {

@@ -7,6 +7,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusBarController: StatusBarController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        CrashReporter.install()
+
         let ver = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.2.4"
         AppLogger.info("Pulse launched (version \(ver))", category: AppLogger.general)
         terminateDuplicateInstances()
@@ -25,6 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         AppLogger.info("Pulse is terminating", category: AppLogger.general)
+        CrashReporter.markCleanShutdown()
         statusBarController?.teardown()
     }
 

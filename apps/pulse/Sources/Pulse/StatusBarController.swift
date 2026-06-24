@@ -9,9 +9,6 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     private let popover: NSPopover
     private var cancellables = Set<AnyCancellable>()
 
-    private let popoverWidth: CGFloat = 340
-    private let popoverHeight: CGFloat = 604
-
     private var lastDisplayedDown = ""
     private var lastDisplayedUp = ""
     private var pendingDownload: UInt64?
@@ -50,12 +47,15 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         popover.behavior = .transient
         popover.animates = true
         popover.delegate = self
-        popover.contentSize = NSSize(width: popoverWidth, height: popoverHeight)
-        popover.contentViewController = NSHostingController(
-            rootView: PopoverView(appState: appState)
-                .frame(width: popoverWidth, height: popoverHeight)
+
+        let rootView = PopoverView(appState: appState)
+            .frame(width: PopoverLayout.width)
+        let hosting = NSHostingController(rootView: rootView)
+        let fittingSize = hosting.sizeThatFits(
+            in: NSSize(width: PopoverLayout.width, height: CGFloat.greatestFiniteMagnitude)
         )
-        popover.contentSize = NSSize(width: popoverWidth, height: popoverHeight)
+        popover.contentViewController = hosting
+        popover.contentSize = NSSize(width: PopoverLayout.width, height: fittingSize.height)
     }
 
     private func bindAppState() {

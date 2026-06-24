@@ -9,7 +9,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     private let popover: NSPopover
     private var cancellables = Set<AnyCancellable>()
 
-    private let popoverWidth: CGFloat = 320
+    private let popoverWidth: CGFloat = 340
     private let popoverHeight: CGFloat = 604
 
     private var lastDisplayedDown = ""
@@ -87,6 +87,12 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         lastDisplayedDown = down
         lastDisplayedUp = up
         statusItem.button?.image = MenuBarLabelRenderer.render(download: download, upload: upload)
+
+        // Force the status item to recalculate its width. This ensures the menu bar
+        // label visibly updates/resizes immediately when values change (e.g. from "0"
+        // to real Mbps). Without this, updates can appear stuck until the popover
+        // is opened (which triggers menu bar re-layout).
+        statusItem.length = NSStatusItem.variableLength
     }
 
     private func flushPendingLabelUpdate() {

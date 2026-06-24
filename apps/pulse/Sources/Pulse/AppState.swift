@@ -16,6 +16,8 @@ final class AppState: ObservableObject {
     @Published var diskProcesses: [ProcessActivity] = []
     @Published var tempSnapshot = TempSnapshot.unavailable
     @Published var fanSnapshot = FanSnapshot.unavailable
+    @Published var memorySnapshot = MemorySnapshot.unavailable
+    @Published var memoryProcesses: [MemoryProcessActivity] = []
     @Published var lastError: String?
 
     @Published private(set) var networkDownHistory: [Double] = []
@@ -26,6 +28,7 @@ final class AppState: ObservableObject {
     @Published private(set) var gpuHistory: [Double] = []
     @Published private(set) var cpuTempHistory: [Double] = []
     @Published private(set) var gpuTempHistory: [Double] = []
+    @Published private(set) var memoryUsedHistory: [Double] = []
 
     let networkMonitor = NetworkMonitor()
     let diskMonitor = DiskMonitor()
@@ -33,11 +36,27 @@ final class AppState: ObservableObject {
     let gpuMonitor = GPUMonitor()
     let tempMonitor = TempMonitor()
     let fanMonitor = FanMonitor()
+    let memoryMonitor = MemoryMonitor()
 
-    private let updateManager = UpdateManager(
-        currentVersion: (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String)?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? "0.2.1"
+    private lazy var updateManager = UpdateManager(
+        currentVersion: Self.currentAppVersion
     )
+
+    static var currentAppVersion: String {
+        if let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
+           !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return v.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        // Fallback for debug runs of the raw executable (bundle plist may not be loaded)
+        if let plistURL = Bundle.main.url(forResource: "Info", withExtension: "plist"),
+           let data = try? Data(contentsOf: plistURL),
+           let dict = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any],
+           let v = dict["CFBundleShortVersionString"] as? String,
+           !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return v.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return "0.2.3"
+    }
     @Published var availableUpdate: AppUpdate?
     @Published var isDownloadingUpdate = false
     @Published var updateProgress: Double = 0
@@ -52,6 +71,12 @@ final class AppState: ObservableObject {
         }
     }
 
+    @Published var aggressivePurge: Bool = UserDefaults.standard.bool(forKey: "aggressivePurge") {
+        didSet {
+            UserDefaults.standard.set(aggressivePurge, forKey: "aggressivePurge")
+        }
+    }
+
     private var refreshTask: Task<Void, Never>?
     private var updateCheckTask: Task<Void, Never>?
     private var downHistory = HistoryBuffer()
@@ -62,6 +87,7 @@ final class AppState: ObservableObject {
     private var gpuHistoryBuffer = HistoryBuffer()
     private var cpuTempHistoryBuffer = HistoryBuffer()
     private var gpuTempHistoryBuffer = HistoryBuffer()
+    private var memoryUsedHistoryBuffer = HistoryBuffer()
 
     let refreshInterval: TimeInterval = 1.0
 
@@ -73,12 +99,19 @@ final class AppState: ObservableObject {
         if let t = tempSnapshot.cpuTemperature {
             base += " · \(Int(round(t)))°C"
         }
+        if memorySnapshot.isValid {
+            base += " · Free \(ByteFormatter.formatBytes(memorySnapshot.free))"
+        }
         return base
     }
 
     init() {
-        startMonitoring()
         checkForUpdates()
+        // start() / startMonitoring() called from AppDelegate right after creation
+    }
+
+    func start() {
+        startMonitoring()
     }
 
     deinit {
@@ -95,6 +128,8 @@ final class AppState: ObservableObject {
         async let diskProcesses = diskMonitor.sampleProcesses()
         async let cpuProcesses = cpuMonitor.sampleProcesses()
         async let gpuProcesses = gpuMonitor.sampleProcesses()
+        async let memorySnapshot = memoryMonitor.sample()
+        async let memoryProcesses = memoryMonitor.sampleTopMemoryProcesses()
 
         let rates = await networkRates
         let disk = await diskRates
@@ -110,6 +145,8 @@ final class AppState: ObservableObject {
         self.diskProcesses = await diskProcesses
         self.cpuProcesses = await cpuProcesses
         self.gpuProcesses = await gpuProcesses
+        self.memorySnapshot = await memorySnapshot
+        self.memoryProcesses = await memoryProcesses
         updateHistories()
     }
 
@@ -134,6 +171,10 @@ final class AppState: ObservableObject {
             gpuTempHistoryBuffer.append(gpuT)
         }
 
+        if memorySnapshot.isValid {
+            memoryUsedHistoryBuffer.append(Double(memorySnapshot.used))
+        }
+
         networkDownHistory = downHistory.values
         networkUpHistory = upHistory.values
         diskReadHistory = diskReadHistoryBuffer.values
@@ -142,6 +183,7 @@ final class AppState: ObservableObject {
         gpuHistory = gpuHistoryBuffer.values
         cpuTempHistory = cpuTempHistoryBuffer.values
         gpuTempHistory = gpuTempHistoryBuffer.values
+        memoryUsedHistory = memoryUsedHistoryBuffer.values
     }
 
     private func startMonitoring() {
@@ -296,5 +338,19 @@ final class AppState: ObservableObject {
         AppLogger.info("Terminating current instance for update", category: AppLogger.update)
         // Quit this instance
         NSApp.terminate(nil)
+    }
+
+    func purgeMemory() async {
+        let aggressive = aggressivePurge
+        AppLogger.info("Purging inactive memory (aggressive: \(aggressive))...", category: AppLogger.monitor)
+        let success = await memoryMonitor.purge(aggressive: aggressive)
+        if success {
+            // Refresh stats immediately
+            memorySnapshot = await memoryMonitor.sample()
+            AppLogger.info("Memory purged. Free: \(ByteFormatter.formatBytes(memorySnapshot.free))", category: AppLogger.monitor)
+        } else {
+            lastError = "Failed to free memory"
+            AppLogger.error("Failed to purge memory", category: AppLogger.monitor)
+        }
     }
 }

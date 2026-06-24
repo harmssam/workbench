@@ -7,6 +7,20 @@ enum ProcessRunner {
         case nonZeroExit(Int32)
     }
 
+    private class ResumeState: @unchecked Sendable {
+        private let lock = NSLock()
+        private var didResume = false
+
+        func resumeOnce(_ action: () -> Void) {
+            lock.lock()
+            defer { lock.unlock() }
+            if !didResume {
+                didResume = true
+                action()
+            }
+        }
+    }
+
     static func run(
         executable: String,
         arguments: [String] = [],
@@ -25,22 +39,29 @@ enum ProcessRunner {
         return try await withCheckedThrowingContinuation { continuation in
             let deadline = DispatchTime.now() + timeout
 
+            let state = ResumeState()
+
             DispatchQueue.global(qos: .utility).asyncAfter(deadline: deadline) {
                 if process.isRunning {
                     process.terminate()
-                    continuation.resume(throwing: RunnerError.timedOut)
+                    state.resumeOnce {
+                        continuation.resume(throwing: RunnerError.timedOut)
+                    }
                 }
             }
 
             process.terminationHandler = { proc in
-                guard proc.terminationStatus == 0 else {
-                    continuation.resume(throwing: RunnerError.nonZeroExit(proc.terminationStatus))
-                    return
+                if proc.terminationStatus == 0 {
+                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                    let output = String(data: data, encoding: .utf8) ?? ""
+                    state.resumeOnce {
+                        continuation.resume(returning: output)
+                    }
+                } else {
+                    state.resumeOnce {
+                        continuation.resume(throwing: RunnerError.nonZeroExit(proc.terminationStatus))
+                    }
                 }
-
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                let output = String(data: data, encoding: .utf8) ?? ""
-                continuation.resume(returning: output)
             }
         }
     }

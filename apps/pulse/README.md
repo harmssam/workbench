@@ -2,7 +2,7 @@
 
 A lightweight macOS menu bar monitor for network, disk, CPU, GPU, temperature, and fan activity.
 
-**Current release: v0.2.2**
+**Current release: v0.2.3**
 
 ## Features
 
@@ -81,10 +81,10 @@ swift test
 
 ```bash
 chmod +x scripts/release.sh
-./scripts/release.sh 0.2.1
+./scripts/release.sh 0.2.3
 ```
 
-This creates and pushes a `pulse-v0.2.1` tag. GitHub Actions builds the app, packages a zip, and publishes the release.
+This creates and pushes a `pulse-v0.2.3` tag. GitHub Actions builds the app, packages a zip, and publishes the release.
 
 ## Architecture
 
@@ -96,12 +96,15 @@ NSStatusItem + NSPopover (SwiftUI)
 ├── GPUMonitor      → IOKit IOAccelerator
 ├── TempMonitor     → AppleSMC via IOKit
 ├── FanMonitor      → AppleSMC via IOKit
+├── MemoryMonitor   → Mach vm_statistics64 + sysctl (with Purge button)
 └── UpdateManager   → GitHub Releases API (opt-in auto-update)
 ```
 
 The **Thermal** card combines live CPU/GPU temperatures with animated fan icons (rotation + blur scale with actual RPM).
 
 The header shows a small **auto-update toggle** at the far right (disabled by default). When enabled, new releases download and install automatically.
+
+The **Memory** card shows RAM usage and has a **"Free Memory"** button that runs `purge` to release inactive memory — especially useful before loading large LLMs.
 
 ## Further reading
 

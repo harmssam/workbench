@@ -4,7 +4,7 @@ import SwiftUI
 struct PopoverView: View {
     @ObservedObject var appState: AppState
 
-    private let popoverWidth: CGFloat = 320
+    private let popoverWidth: CGFloat = 340
     private let scrollHeight: CGFloat = 490
 
     var body: some View {
@@ -72,6 +72,7 @@ struct PopoverView: View {
                 diskCard
                 cpuCard
                 gpuCard
+                memoryCard
                 tempCard
             }
             .padding(12)
@@ -156,17 +157,92 @@ struct PopoverView: View {
             ] : [],
             columns: [
                 MetricColumn(title: "Process", width: .flexible, alignment: .leading),
-                MetricColumn(title: "GPU", width: .fixed(52), alignment: .trailing),
                 MetricColumn(title: "Memory", width: .fixed(64), alignment: .trailing)
             ],
             rows: appState.gpuProcesses.map { process in
                 [
                     process.name,
-                    PercentFormatter.formatDetailed(process.usage),
                     ByteFormatter.formatBytes(process.memoryBytes)
                 ]
             },
             emptyMessage: gpu.isAvailable ? "No active GPU clients" : "GPU metrics unavailable on this system"
+        )
+    }
+
+    private var memoryCard: some View {
+        let mem = appState.memorySnapshot
+        guard mem.isValid else {
+            return AnyView(
+                MetricCard(
+                    title: "Memory",
+                    icon: "memorychip",
+                    summary: [SummaryItem(label: "Status", value: "Unavailable", tint: .secondary)],
+                    sparklines: [],
+                    columns: [],
+                    rows: [],
+                    emptyMessage: "Memory stats unavailable"
+                )
+            )
+        }
+
+        let usedStr = ByteFormatter.formatBytes(mem.used)
+        let freeStr = ByteFormatter.formatBytes(mem.free)
+
+        // Compact total for title, e.g. "32GB" or "16.5GB"
+        let gib = mem.total / (1024 * 1024 * 1024)
+        let rem = mem.total % (1024 * 1024 * 1024)
+        let totalDisplay: String
+        if rem == 0 {
+            totalDisplay = "\(gib)GB"
+        } else {
+            let totalGB = Double(mem.total) / (1024 * 1024 * 1024)
+            totalDisplay = String(format: "%.1fGB", totalGB)
+        }
+
+        let topMemory = Array(appState.memoryProcesses.prefix(5))
+
+        let card = MetricCard(
+            title: "Memory (\(totalDisplay))",
+            icon: "memorychip",
+            summary: [
+                SummaryItem(label: "Used", value: usedStr, tint: .purple),
+                SummaryItem(label: "Free", value: freeStr, tint: .purple),
+                SummaryItem(label: "Wired", value: ByteFormatter.formatBytes(mem.wired), tint: .purple),
+                SummaryItem(label: "Compr.", value: ByteFormatter.formatBytes(mem.compressed), tint: .purple)
+            ],
+            sparklines: [
+                SparklineSpec(values: appState.memoryUsedHistory, color: .purple, label: "Used")
+            ],
+            columns: [
+                MetricColumn(title: "Process", width: .flexible, alignment: .leading),
+                MetricColumn(title: "Memory", width: .fixed(64), alignment: .trailing)
+            ],
+            rows: topMemory.map { proc in
+                [proc.name, ByteFormatter.formatBytes(proc.memoryBytes)]
+            },
+            emptyMessage: "No significant memory users"
+        )
+
+        return AnyView(
+            VStack(spacing: 8) {
+                card
+
+                Toggle("Aggressive", isOn: $appState.aggressivePurge)
+                    .toggleStyle(.checkbox)
+                    .font(.caption2)
+                    .help("Simulates critical memory pressure + extra purges. Frees significantly more RAM for large LLMs. Use with care.")
+
+                Button {
+                    Task { await appState.purgeMemory() }
+                } label: {
+                    Label(appState.aggressivePurge ? "Free Memory (Aggressive)" : "Free Memory", systemImage: "trash")
+                        .font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.purple)
+                .controlSize(.small)
+                .help(appState.aggressivePurge ? "Aggressive purge: forces kernel to release max possible memory" : "Purge inactive memory (helps free RAM for LLMs)")
+            }
         )
     }
 
@@ -311,7 +387,7 @@ struct PopoverView: View {
             .focusable(false)
             .help("Quit Pulse (⌘Q)")
 
-            let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.2.1"
+            let version = AppState.currentAppVersion
             Text("v\(version)")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
@@ -400,7 +476,7 @@ private struct MetricCard: View {
             }
 
             if !summary.isEmpty {
-                HStack(spacing: 8) {
+                HStack(spacing: 3) {
                     ForEach(Array(summary.enumerated()), id: \.offset) { _, item in
                         summaryTile(item)
                     }
@@ -468,14 +544,15 @@ private struct MetricCard: View {
             Text(item.label)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
             Text(item.value)
-                .font(.system(.callout, design: .monospaced).weight(.medium))
+                .font(.system(.subheadline, design: .monospaced).weight(.medium))
                 .foregroundStyle(item.tint)
                 .lineLimit(1)
-                .minimumScaleFactor(0.8)
+                .minimumScaleFactor(0.75)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(8)
+        .padding(4)
         .background(Color.primary.opacity(0.055))
         .clipShape(RoundedRectangle(cornerRadius: 6))
     }

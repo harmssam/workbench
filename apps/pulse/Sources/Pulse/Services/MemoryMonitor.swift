@@ -1,0 +1,148 @@
+import Darwin
+import Foundation
+
+actor MemoryMonitor {
+    func sample() -> MemorySnapshot {
+        var total: UInt64 = 0
+        var size = MemoryLayout<UInt64>.size
+        let totalResult = sysctlbyname("hw.memsize", &total, &size, nil, 0)
+        guard totalResult == 0, total > 0 else {
+            return .unavailable
+        }
+
+        var vmStats = vm_statistics64()
+        var count = mach_msg_type_number_t(MemoryLayout<vm_statistics64>.size / MemoryLayout<integer_t>.size)
+        let result = withUnsafeMutablePointer(to: &vmStats) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                host_statistics64(mach_host_self(), HOST_VM_INFO64, $0, &count)
+            }
+        }
+
+        guard result == KERN_SUCCESS else {
+            return .unavailable
+        }
+
+        let pageSize = UInt64(getpagesize())
+
+        let free = UInt64(vmStats.free_count) * pageSize
+        let active = UInt64(vmStats.active_count) * pageSize
+        let _ = UInt64(vmStats.inactive_count) * pageSize
+        let wired = UInt64(vmStats.wire_count) * pageSize
+        let compressed = UInt64(vmStats.compressor_page_count) * pageSize
+
+        // Used is generally everything except truly free.
+        // For display, common is total - free (free includes inactive that can be purged)
+        let used = total - free
+
+        return MemorySnapshot(
+            total: total,
+            free: free,
+            used: used,
+            active: active,
+            wired: wired,
+            compressed: compressed,
+            isValid: true
+        )
+    }
+
+    func purge(aggressive: Bool = false) async -> Bool {
+        let purgePath = "/usr/bin/purge"
+        let purgeExists = FileManager.default.fileExists(atPath: purgePath)
+
+        if purgeExists {
+            do {
+                AppLogger.info("Running standard purge...", category: AppLogger.monitor)
+                _ = try await ProcessRunner.run(executable: purgePath, arguments: [])
+                AppLogger.info("Standard purge succeeded.", category: AppLogger.monitor)
+            } catch ProcessRunner.RunnerError.nonZeroExit(let code) {
+                AppLogger.info("purge exited with status \(code) (often harmless)", category: AppLogger.monitor)
+            } catch {
+                AppLogger.error("Standard purge failed: \(error)", category: AppLogger.monitor)
+                if !aggressive {
+                    return false
+                }
+            }
+        } else {
+            AppLogger.info("No /usr/bin/purge available on this system.", category: AppLogger.monitor)
+            if !aggressive {
+                // For standard mode without purge, do a light pressure to at least attempt some release
+                AppLogger.info("Falling back to light memory_pressure for standard purge...", category: AppLogger.monitor)
+                do {
+                    let pressure = Process()
+                    pressure.executableURL = URL(fileURLWithPath: "/usr/bin/memory_pressure")
+                    pressure.arguments = ["-l", "warn", "-s", "2"]
+                    try pressure.run()
+                    try await Task.sleep(for: .seconds(3))
+                    if pressure.isRunning { pressure.terminate() }
+                    AppLogger.info("Light pressure fallback completed.", category: AppLogger.monitor)
+                    return true
+                } catch {
+                    AppLogger.error("Light fallback failed: \(error)", category: AppLogger.monitor)
+                    return false
+                }
+            }
+        }
+
+        if aggressive {
+            AppLogger.info("Performing aggressive memory release via memory_pressure...", category: AppLogger.monitor)
+            do {
+                let pressure = Process()
+                pressure.executableURL = URL(fileURLWithPath: "/usr/bin/memory_pressure")
+                pressure.arguments = ["-l", "critical", "-s", "5"]
+                try pressure.run()
+
+                try await Task.sleep(for: .seconds(6))
+
+                if pressure.isRunning {
+                    pressure.terminate()
+                }
+
+                if purgeExists {
+                    _ = try? await ProcessRunner.run(executable: purgePath, arguments: [])
+                }
+
+                AppLogger.info("Aggressive purge completed.", category: AppLogger.monitor)
+            } catch {
+                AppLogger.error("Aggressive memory_pressure step failed (non-fatal): \(error)", category: AppLogger.monitor)
+            }
+            return true
+        }
+
+        return true
+    }
+
+    func sampleTopMemoryProcesses(limit: Int = 5) async -> [MemoryProcessActivity] {
+        guard let output = try? await ProcessRunner.run(
+            executable: "/bin/ps",
+            arguments: ["-ax", "-o", "pid,rss,comm"]
+        ) else {
+            return []
+        }
+
+        var processes: [MemoryProcessActivity] = []
+
+        for line in output.components(separatedBy: "\n").dropFirst() {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty { continue }
+
+            let parts = trimmed.split(separator: " ", omittingEmptySubsequences: true)
+            guard parts.count >= 3,
+                  let pid = Int32(parts[0]),
+                  let rssKB = UInt64(parts[1]) else {
+                continue
+            }
+
+            let name = (String(parts[2]) as NSString).lastPathComponent
+            let bytes = rssKB * 1024
+
+            if bytes > 0 {
+                processes.append(MemoryProcessActivity(id: pid, name: name, memoryBytes: bytes))
+            }
+        }
+
+        return processes
+            .sorted { $0.memoryBytes > $1.memoryBytes }
+            .prefix(limit)
+            .map { $0 }
+    }
+}

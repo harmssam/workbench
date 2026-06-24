@@ -2,7 +2,7 @@
 
 A lightweight macOS menu bar monitor for network, disk, CPU, GPU, temperature, and fan activity.
 
-**Current release: v0.2.0**
+**Current release: v0.2.1**
 
 ## Features
 

@@ -25,6 +25,36 @@ struct PopoverView: View {
                 Text("Pulse")
                     .font(.headline)
                 Spacer()
+
+                if !appState.autoUpdateEnabled, let update = appState.availableUpdate {
+                    Button {
+                        appState.startUpdate()
+                    } label: {
+                        Label("Update \(update.version)", systemImage: "arrow.down.circle.fill")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.blue)
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Click to update to version \(update.version)")
+                } else if appState.isDownloadingUpdate {
+                    HStack(spacing: 4) {
+                        ProgressView(value: appState.updateProgress)
+                            .frame(width: 60)
+                        Text(appState.updateStatus ?? "Updating...")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                // Auto-update option (disabled by default) at the very top right
+                Toggle(isOn: $appState.autoUpdateEnabled) {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .imageScale(.small)
+                }
+                .toggleStyle(.button)
+                .labelsHidden()
+                .controlSize(.small)
+                .help(appState.autoUpdateEnabled ? "Auto-update enabled" : "Auto-update disabled (disabled by default)")
             }
             Text(appState.headerSubtitle)
                 .font(.caption)
@@ -254,11 +284,18 @@ struct PopoverView: View {
                 .foregroundStyle(appState.lastError == nil ? Color.secondary : Color.red)
                 .lineLimit(1)
             Spacer()
-            Button("Quit") {
+            Button {
                 NSApplication.shared.terminate(nil)
+            } label: {
+                Image(systemName: "power")
+                    .imageScale(.small)
             }
             .buttonStyle(.borderless)
             .font(.caption2)
+            .foregroundStyle(.secondary)
+            .keyboardShortcut("q", modifiers: .command)
+            .focusable(false)
+            .help("Quit Pulse (⌘Q)")
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)

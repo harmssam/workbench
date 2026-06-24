@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 @MainActor
@@ -32,7 +33,25 @@ final class AppState: ObservableObject {
     let tempMonitor = TempMonitor()
     let fanMonitor = FanMonitor()
 
+    private let updateManager = UpdateManager(
+        currentVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
+    )
+    @Published var availableUpdate: AppUpdate?
+    @Published var isDownloadingUpdate = false
+    @Published var updateProgress: Double = 0
+    @Published var updateStatus: String?
+
+    @Published var autoUpdateEnabled: Bool = UserDefaults.standard.bool(forKey: "autoUpdateEnabled") {
+        didSet {
+            UserDefaults.standard.set(autoUpdateEnabled, forKey: "autoUpdateEnabled")
+            if autoUpdateEnabled, availableUpdate != nil, !isDownloadingUpdate {
+                startUpdate()
+            }
+        }
+    }
+
     private var refreshTask: Task<Void, Never>?
+    private var updateCheckTask: Task<Void, Never>?
     private var downHistory = HistoryBuffer()
     private var upHistory = HistoryBuffer()
     private var diskReadHistoryBuffer = HistoryBuffer()
@@ -57,10 +76,12 @@ final class AppState: ObservableObject {
 
     init() {
         startMonitoring()
+        checkForUpdates()
     }
 
     deinit {
         refreshTask?.cancel()
+        updateCheckTask?.cancel()
     }
 
     func refresh() async {
@@ -128,5 +149,115 @@ final class AppState: ObservableObject {
                 try? await Task.sleep(for: .seconds(self?.refreshInterval ?? 1))
             }
         }
+
+        updateCheckTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(4 * 3600))
+                self?.checkForUpdates()
+            }
+        }
+    }
+
+    func checkForUpdates() {
+        Task {
+            if let update = await updateManager.checkForUpdate() {
+                await MainActor.run {
+                    self.availableUpdate = update
+                    if self.autoUpdateEnabled {
+                        self.startUpdate()
+                    }
+                }
+            }
+        }
+    }
+
+    func startUpdate() {
+        guard let update = availableUpdate, !isDownloadingUpdate else { return }
+
+        isDownloadingUpdate = true
+        updateStatus = "Downloading v\(update.version)..."
+        updateProgress = 0
+
+        Task {
+            do {
+                let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("PulseUpdate-\(UUID().uuidString)")
+                try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+
+                let zipURL = tempDir.appendingPathComponent("Pulse.zip")
+
+                // Download with progress
+                let (bytes, response) = try await URLSession.shared.bytes(from: update.downloadURL)
+                var received: Int64 = 0
+                var data = Data()
+
+                if let httpResponse = response as? HTTPURLResponse,
+                   let contentLength = httpResponse.value(forHTTPHeaderField: "Content-Length"),
+                   let total = Int64(contentLength) {
+                    for try await byte in bytes {
+                        data.append(byte)
+                        received += 1
+                        let progress = Double(received) / Double(total)
+                        await MainActor.run {
+                            self.updateProgress = progress
+                        }
+                    }
+                } else {
+                    for try await byte in bytes {
+                        data.append(byte)
+                    }
+                }
+
+                try data.write(to: zipURL)
+
+                await MainActor.run {
+                    self.updateStatus = "Extracting..."
+                }
+
+                // Unzip
+                let unzip = Process()
+                unzip.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+                unzip.arguments = ["-o", zipURL.path, "-d", tempDir.path]
+                try unzip.run()
+                unzip.waitUntilExit()
+
+                let newAppURL = tempDir.appendingPathComponent("Pulse.app")
+                guard FileManager.default.fileExists(atPath: newAppURL.path) else {
+                    throw NSError(domain: "Update", code: 1, userInfo: [NSLocalizedDescriptionKey: "Extracted app not found"])
+                }
+
+                await MainActor.run {
+                    self.updateStatus = "Ready to install"
+                    self.isDownloadingUpdate = false
+                    self.availableUpdate = nil
+                    self.performUpdateInstall(newAppURL: newAppURL)
+                }
+            } catch {
+                await MainActor.run {
+                    self.updateStatus = "Update failed: \(error.localizedDescription)"
+                    self.isDownloadingUpdate = false
+                }
+            }
+        }
+    }
+
+    private func performUpdateInstall(newAppURL: URL) {
+        let currentAppURL = Bundle.main.bundleURL
+
+        // Build a detached script to replace after we quit
+        let script = """
+        (sleep 1.5; \
+        rm -rf "\(currentAppURL.path)"; \
+        mv "\(newAppURL.path)" "\(currentAppURL.path)"; \
+        open "\(currentAppURL.path)"
+        ) &
+        """
+
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/bin/bash")
+        task.arguments = ["-c", script]
+        try? task.run()
+
+        // Quit this instance
+        NSApp.terminate(nil)
     }
 }

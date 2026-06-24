@@ -7,7 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusBarController: StatusBarController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        let ver = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.2.3"
+        let ver = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.2.4"
         AppLogger.info("Pulse launched (version \(ver))", category: AppLogger.general)
         terminateDuplicateInstances()
         NSApp.setActivationPolicy(.accessory)

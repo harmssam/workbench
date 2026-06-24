@@ -55,7 +55,7 @@ final class AppState: ObservableObject {
            !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return v.trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        return "0.2.3"
+        return "0.2.4"
     }
     @Published var availableUpdate: AppUpdate?
     @Published var isDownloadingUpdate = false

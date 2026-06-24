@@ -2,7 +2,7 @@
 
 A lightweight macOS menu bar monitor for network, disk, CPU, GPU, temperature, and fan activity.
 
-**Current release: v0.2.3**
+**Current release: v0.2.4**
 
 ## Features
 
@@ -81,10 +81,10 @@ swift test
 
 ```bash
 chmod +x scripts/release.sh
-./scripts/release.sh 0.2.3
+./scripts/release.sh 0.2.4
 ```
 
-This creates and pushes a `pulse-v0.2.3` tag. GitHub Actions builds the app, packages a zip, and publishes the release.
+This creates and pushes a `pulse-v0.2.4` tag. GitHub Actions builds the app, packages a zip, and publishes the release.
 
 ## Architecture
 

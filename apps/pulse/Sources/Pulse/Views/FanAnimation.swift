@@ -14,15 +14,26 @@ struct FanAnimation: View {
 
     @State private var rotation: Double = 0
     @State private var spinBoost: Double = 0
+    @State private var eggRotation: Double = 0
+
+    private var effectiveRPM: Double {
+        let normalized = min(Double(fan.currentRPM) / 5200.0, 1.8)
+        return (normalized + spinBoost) * 5200.0
+    }
 
     // High frequency timer for smooth rotation
     private let timer = Timer.publish(every: 1.0 / 30.0, on: .main, in: .common).autoconnect()
 
     private var blurRadius: Double {
-        // More blur at higher speeds. Max around 3.5-4 for fast fans.
-        // Boost a bit for easter egg spins too.
-        let base = min(Double(fan.currentRPM) / 1400.0, 4.0)
-        return min(base + spinBoost * 0.4, 6.0)
+        // Blur kicks in above 250 RPM and increases with visual speed.
+        // Uses effective speed (real + easter egg boost) so motion blur
+        // appears during the fast spin and decreases as it winds down.
+        let rpm = effectiveRPM
+        if rpm < 250 {
+            return 0
+        }
+        // Dialed back for realistic motion blur without being too aggressive.
+        return min((rpm - 250) / 2500.0, 2.0)
     }
 
     var body: some View {
@@ -34,7 +45,7 @@ struct FanAnimation: View {
                     .scaledToFit()
                     .frame(width: 28, height: 28)
                     .foregroundStyle(.orange)
-                    .rotationEffect(.degrees(rotation))
+                    .rotationEffect(.degrees(rotation + eggRotation))
                     .blur(radius: blurRadius)
                     .opacity(0.92)
                     .onTapGesture {
@@ -47,7 +58,7 @@ struct FanAnimation: View {
                     .scaledToFit()
                     .frame(width: 28, height: 28)
                     .foregroundStyle(.orange)
-                    .rotationEffect(.degrees(rotation))
+                    .rotationEffect(.degrees(rotation + eggRotation))
                     .blur(radius: blurRadius)
                     .onTapGesture {
                         triggerEasterEggSpin()
@@ -84,16 +95,15 @@ struct FanAnimation: View {
     }
 
     private func triggerEasterEggSpin() {
-        // Quick high-speed spin (easter egg)
-        withAnimation(.linear(duration: 0.5)) {
-            spinBoost = 12.0
+        // Quick ramp up to full speed (0.4s), then slower ramp down (4s).
+        // Animate eggRotation for visible spinning in tandem with blur/speed.
+        withAnimation(.linear(duration: 0.4)) {
+            spinBoost = 5.0
+            eggRotation += 360 * 8  // quick multi-turn spin
         }
-
-        // Wind down after a few seconds
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            withAnimation(.easeOut(duration: 3.0)) {
-                spinBoost = 0
-            }
+        withAnimation(.easeOut(duration: 4.0).delay(0.4)) {
+            spinBoost = 0
+            eggRotation += 360 * 4  // additional turns during wind-down
         }
     }
 }

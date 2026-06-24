@@ -32,8 +32,8 @@ enum MenuBarLabelRenderer {
             ctx.scaleBy(x: scale, y: scale)
         }
 
-        drawRow(downRow, y: 5.5, width: width, attributes: attributes)
-        drawRow(upRow, y: 0, width: width, attributes: attributes)
+        drawRow(upRow, y: 5.5, width: width, attributes: attributes)
+        drawRow(downRow, y: 0, width: width, attributes: attributes)
 
         image.unlockFocus()
         image.isTemplate = false

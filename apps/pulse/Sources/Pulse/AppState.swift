@@ -55,12 +55,15 @@ final class AppState: ObservableObject {
            !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return v.trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        return "0.2.4"
+        return "0.2.5"
     }
     @Published var availableUpdate: AppUpdate?
     @Published var isDownloadingUpdate = false
     @Published var updateProgress: Double = 0
     @Published var updateStatus: String?
+    @Published var updateFailed = false
+
+    private var updateTask: Task<Void, Never>?
 
     @Published var autoUpdateEnabled: Bool = UserDefaults.standard.bool(forKey: "autoUpdateEnabled") {
         didSet {
@@ -74,6 +77,12 @@ final class AppState: ObservableObject {
     @Published var aggressivePurge: Bool = UserDefaults.standard.bool(forKey: "aggressivePurge") {
         didSet {
             UserDefaults.standard.set(aggressivePurge, forKey: "aggressivePurge")
+        }
+    }
+
+    @Published var metricCardOrder: [MetricCardKind] = MetricCardKind.loadSavedOrder() {
+        didSet {
+            MetricCardKind.saveOrder(metricCardOrder)
         }
     }
 
@@ -117,6 +126,7 @@ final class AppState: ObservableObject {
     deinit {
         refreshTask?.cancel()
         updateCheckTask?.cancel()
+        updateTask?.cancel()
     }
 
     func refresh() async {
@@ -236,12 +246,14 @@ final class AppState: ObservableObject {
     func startUpdate() {
         guard let update = availableUpdate, !isDownloadingUpdate else { return }
 
+        updateTask?.cancel()
         AppLogger.info("Starting update to v\(update.version)", category: AppLogger.update)
         isDownloadingUpdate = true
+        updateFailed = false
         updateStatus = "Downloading v\(update.version)..."
         updateProgress = 0
 
-        Task {
+        updateTask = Task {
             do {
                 let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("PulseUpdate-\(UUID().uuidString)")
                 AppLogger.info("Using temp dir: \(tempDir.path)", category: AppLogger.update)
@@ -249,69 +261,50 @@ final class AppState: ObservableObject {
 
                 let zipURL = tempDir.appendingPathComponent("Pulse.zip")
 
-                // Download with progress
                 AppLogger.info("Downloading from \(update.downloadURL)", category: AppLogger.update)
-                let (bytes, response) = try await URLSession.shared.bytes(from: update.downloadURL)
-                var received: Int64 = 0
-                var data = Data()
-
-                if let httpResponse = response as? HTTPURLResponse,
-                   let contentLength = httpResponse.value(forHTTPHeaderField: "Content-Length"),
-                   let total = Int64(contentLength) {
-                    AppLogger.info("Download size: \(total) bytes", category: AppLogger.update)
-                    for try await byte in bytes {
-                        data.append(byte)
-                        received += 1
-                        if received % (total / 20 + 1) == 0 {  // Throttle progress updates
-                            let progress = Double(received) / Double(total)
-                            await MainActor.run {
-                                self.updateProgress = progress
-                            }
+                try await UpdateDownloader.download(from: update.downloadURL, to: zipURL) { progress in
+                    await MainActor.run {
+                        if let progress {
+                            self.updateProgress = progress
                         }
                     }
-                } else {
-                    for try await byte in bytes {
-                        data.append(byte)
-                    }
                 }
-
-                AppLogger.info("Writing zip to \(zipURL.path)", category: AppLogger.update)
-                try data.write(to: zipURL)
 
                 await MainActor.run {
                     self.updateStatus = "Extracting..."
+                    self.updateProgress = 0
                 }
 
-                // Unzip
-                AppLogger.info("Running unzip...", category: AppLogger.update)
-                let unzip = Process()
-                unzip.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-                unzip.arguments = ["-o", zipURL.path, "-d", tempDir.path]
-                try unzip.run()
-                unzip.waitUntilExit()
-
-                let newAppURL = tempDir.appendingPathComponent("Pulse.app")
-                guard FileManager.default.fileExists(atPath: newAppURL.path) else {
-                    AppLogger.error("Extracted app not found at \(newAppURL.path)", category: AppLogger.update)
-                    throw NSError(domain: "Update", code: 1, userInfo: [NSLocalizedDescriptionKey: "Extracted app not found"])
-                }
-
+                let newAppURL = try await UpdateExtractor.extract(zipURL: zipURL, to: tempDir)
                 AppLogger.info("Update package ready at \(newAppURL.path)", category: AppLogger.update)
 
                 await MainActor.run {
-                    self.updateStatus = "Ready to install"
+                    self.updateStatus = "Installing..."
                     self.isDownloadingUpdate = false
                     self.availableUpdate = nil
                     self.performUpdateInstall(newAppURL: newAppURL)
                 }
+            } catch is CancellationError {
+                AppLogger.info("Update cancelled", category: AppLogger.update)
+                await MainActor.run {
+                    self.isDownloadingUpdate = false
+                    self.updateStatus = nil
+                }
             } catch {
                 AppLogger.error("Update failed: \(error)", category: AppLogger.update)
                 await MainActor.run {
-                    self.updateStatus = "Update failed: \(error.localizedDescription)"
+                    self.updateStatus = "Update failed"
+                    self.updateFailed = true
                     self.isDownloadingUpdate = false
                 }
             }
         }
+    }
+
+    func retryUpdate() {
+        updateFailed = false
+        updateStatus = nil
+        startUpdate()
     }
 
     private func performUpdateInstall(newAppURL: URL) {

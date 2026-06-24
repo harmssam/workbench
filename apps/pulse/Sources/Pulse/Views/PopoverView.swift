@@ -3,6 +3,8 @@ import SwiftUI
 
 struct PopoverView: View {
     @ObservedObject var appState: AppState
+    @State private var draggingCard: MetricCardKind?
+    @State private var isQuitHovered = false
 
     private let popoverWidth: CGFloat = 340
     private let scrollHeight: CGFloat = 490
@@ -19,6 +21,17 @@ struct PopoverView: View {
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
+    private var updateStatusLabel: String {
+        if let status = appState.updateStatus {
+            if appState.updateProgress > 0, status.hasPrefix("Downloading") {
+                let percent = Int((appState.updateProgress * 100).rounded())
+                return "Downloading \(percent)%"
+            }
+            return status
+        }
+        return "Updating..."
+    }
+
     private var header: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack {
@@ -26,7 +39,17 @@ struct PopoverView: View {
                     .font(.headline)
                 Spacer()
 
-                if !appState.autoUpdateEnabled, let update = appState.availableUpdate {
+                if appState.updateFailed, appState.availableUpdate != nil {
+                    Button {
+                        appState.retryUpdate()
+                    } label: {
+                        Label("Retry update", systemImage: "arrow.clockwise.circle.fill")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.orange)
+                    }
+                    .buttonStyle(.borderless)
+                    .help(appState.updateStatus ?? "Update failed — tap to retry")
+                } else if !appState.autoUpdateEnabled, let update = appState.availableUpdate {
                     Button {
                         appState.startUpdate()
                     } label: {
@@ -38,11 +61,18 @@ struct PopoverView: View {
                     .help("Click to update to version \(update.version)")
                 } else if appState.isDownloadingUpdate {
                     HStack(spacing: 4) {
-                        ProgressView(value: appState.updateProgress)
-                            .frame(width: 60)
-                        Text(appState.updateStatus ?? "Updating...")
+                        if appState.updateProgress > 0 {
+                            ProgressView(value: appState.updateProgress)
+                                .frame(width: 60)
+                        } else {
+                            ProgressView()
+                                .controlSize(.small)
+                                .frame(width: 16)
+                        }
+                        Text(updateStatusLabel)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
                 }
 
@@ -68,17 +98,43 @@ struct PopoverView: View {
     private var cardScroller: some View {
         ScrollView(.vertical, showsIndicators: true) {
             LazyVStack(spacing: 12) {
-                networkCard
-                diskCard
-                cpuCard
-                gpuCard
-                memoryCard
-                tempCard
+                ForEach(appState.metricCardOrder) { kind in
+                    reorderableSection(for: kind)
+                }
             }
             .padding(12)
             .frame(width: popoverWidth)
         }
         .frame(width: popoverWidth, height: scrollHeight, alignment: .top)
+    }
+
+    private func reorderableSection(for kind: MetricCardKind) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            CardGrabber(kind: kind, dragging: $draggingCard)
+            cardContent(for: kind)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .opacity(draggingCard == kind ? 0.55 : 1)
+        .onDrop(
+            of: [.plainText],
+            delegate: MetricCardReorderDelegate(
+                card: kind,
+                order: $appState.metricCardOrder,
+                dragging: $draggingCard
+            )
+        )
+    }
+
+    @ViewBuilder
+    private func cardContent(for kind: MetricCardKind) -> some View {
+        switch kind {
+        case .network: networkCard
+        case .disk: diskCard
+        case .cpu: cpuCard
+        case .gpu: gpuCard
+        case .memory: memoryCard
+        case .thermal: tempCard
+        }
     }
 
     private var networkCard: some View {
@@ -379,12 +435,18 @@ struct PopoverView: View {
             } label: {
                 Image(systemName: "power")
                     .imageScale(.small)
+                    .foregroundStyle(isQuitHovered ? Color.red : Color.secondary)
+                    .padding(4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(isQuitHovered ? Color.red.opacity(0.14) : Color.clear)
+                    )
             }
             .buttonStyle(.borderless)
             .font(.caption2)
-            .foregroundStyle(.secondary)
             .keyboardShortcut("q", modifiers: .command)
             .focusable(false)
+            .onHover { isQuitHovered = $0 }
             .help("Quit Pulse (⌘Q)")
 
             let version = AppState.currentAppVersion

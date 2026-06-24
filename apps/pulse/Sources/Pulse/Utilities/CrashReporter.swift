@@ -16,6 +16,11 @@ enum CrashReporter {
     }()
 
     nonisolated(unsafe) private static var installed = false
+    nonisolated(unsafe) private static var lastBreadcrumb = "startup"
+
+    static func breadcrumb(_ message: String) {
+        lastBreadcrumb = message
+    }
 
     static func install() {
         guard !installed else { return }
@@ -69,7 +74,10 @@ enum CrashReporter {
 
     private static let signalHandler: @convention(c) (Int32) -> Void = { sig in
         let name = signalName(sig)
-        CrashReporter.signalSafeWrite("FATAL: Signal \(name) (\(sig)) received\n")
+        let context = CrashReporter.lastBreadcrumb
+        CrashReporter.signalSafeWrite(
+            "FATAL: Signal \(name) (\(sig)) received\nLast breadcrumb: \(context)\n"
+        )
         signal(sig, SIG_DFL)
         raise(sig)
     }

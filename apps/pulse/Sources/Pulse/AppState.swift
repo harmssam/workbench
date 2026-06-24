@@ -55,7 +55,7 @@ final class AppState: ObservableObject {
            !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return v.trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        return "0.2.7"
+        return "0.2.8"
     }
     @Published var availableUpdate: AppUpdate?
     @Published var isDownloadingUpdate = false
@@ -134,6 +134,7 @@ final class AppState: ObservableObject {
 
     func refresh() async {
         lastError = nil
+        CrashReporter.breadcrumb("AppState.refresh start")
 
         async let networkRates = networkMonitor.sampleRates()
         async let diskRates = diskMonitor.sampleRates()
@@ -152,8 +153,11 @@ final class AppState: ObservableObject {
         diskWriteRate = disk.write
         cpuUsage = await cpuMonitor.sampleUsage()
         gpuSnapshot = await gpuMonitor.sample()
+        CrashReporter.breadcrumb("AppState.refresh: tempMonitor")
         tempSnapshot = await tempMonitor.sample()
+        CrashReporter.breadcrumb("AppState.refresh: fanMonitor")
         fanSnapshot = await fanMonitor.sample()
+        CrashReporter.breadcrumb("AppState.refresh: fanMonitor done")
         self.networkProcesses = await networkProcesses
         self.diskProcesses = await diskProcesses
         self.cpuProcesses = await cpuProcesses

@@ -15,6 +15,7 @@ struct FanAnimation: View {
     @State private var rotation: Double = 0
     @State private var spinBoost: Double = 0
     @State private var eggRotation: Double = 0
+    @State private var isAnimating = false
 
     private var effectiveRPM: Double {
         let normalized = min(Double(fan.currentRPM) / 5200.0, 1.8)
@@ -77,7 +78,10 @@ struct FanAnimation: View {
                 .foregroundStyle(.orange)
                 .lineLimit(1)
         }
+        .onAppear { isAnimating = true }
+        .onDisappear { isAnimating = false }
         .onReceive(timer) { _ in
+            guard isAnimating else { return }
             updateRotation()
         }
     }

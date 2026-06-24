@@ -2,8 +2,6 @@ import Foundation
 import OSLog
 
 actor TempMonitor {
-    private let smc = SMC()
-
     // Broad probe list of likely Apple Silicon temperature keys (from widely used references).
     // We take the highest plausible reading in each category.
     private let cpuKeys: [String] = [
@@ -29,15 +27,16 @@ actor TempMonitor {
         "TG0D", "TG0P", "TG0H"
     ]
 
-    func sample() -> TempSnapshot {
-        smc.connectIfNeeded()
-        guard smc.isConnected else {
+    func sample() async -> TempSnapshot {
+        CrashReporter.breadcrumb("TempMonitor.sample start")
+
+        guard await SMCService.shared.isConnected else {
             AppLogger.error("SMC not connected for temperature reading", category: AppLogger.monitor)
             return .unavailable
         }
 
-        let cpu = readMaxTemperature(from: cpuKeys)
-        let gpu = readMaxTemperature(from: gpuKeys)
+        let cpu = await readMaxTemperature(from: cpuKeys)
+        let gpu = await readMaxTemperature(from: gpuKeys)
 
         // Only accept plausible temps
         let cpuC = cpu.flatMap { (20.0...130.0).contains($0) ? $0 : nil }
@@ -50,10 +49,10 @@ actor TempMonitor {
         return TempSnapshot(cpuTemperature: cpuC, gpuTemperature: gpuC)
     }
 
-    private func readMaxTemperature(from keys: [String]) -> Double? {
+    private func readMaxTemperature(from keys: [String]) async -> Double? {
         var maxValue: Double = 0
         for key in keys {
-            if let v = smc.readFloat(key: key), v > maxValue {
+            if let v = await SMCService.shared.readFloat(key: key), v > maxValue {
                 maxValue = v
             }
         }

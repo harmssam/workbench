@@ -64,4 +64,32 @@ struct MonitorParsingTests {
         #expect(read == 472_490_442_752)
         #expect(write == 191_732_469_760)
     }
+
+    @Test("Temp monitor samples without crashing on Apple Silicon")
+    func tempSampling() async {
+        let monitor = TempMonitor()
+        let snapshot = await monitor.sample()
+
+        // On real hardware it may return values or .unavailable; just ensure no crash and sane bounds if present.
+        if let cpu = snapshot.cpuTemperature {
+            #expect(cpu > 15 && cpu < 140)
+        }
+        if let gpu = snapshot.gpuTemperature {
+            #expect(gpu > 15 && gpu < 140)
+        }
+    }
+
+    @Test("Fan monitor samples without crashing on Apple Silicon")
+    func fanSampling() async {
+        let monitor = FanMonitor()
+        let snapshot = await monitor.sample()
+
+        // Fans optional or idle; just validate structure if present.
+        for fan in snapshot.fans {
+            #expect(fan.currentRPM >= 0)
+            if let minR = fan.minRPM, let maxR = fan.maxRPM {
+                #expect(minR <= maxR)
+            }
+        }
+    }
 }

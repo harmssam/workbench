@@ -1,14 +1,15 @@
 # Pulse
 
-A lightweight macOS menu bar monitor for network, disk, CPU, and GPU activity.
+A lightweight macOS menu bar monitor for network, disk, CPU, GPU, temperature, and fan activity.
 
-**Current release: v0.1.2**
+**Current release: v0.2.0**
 
 ## Features
 
 - Compact Mbps readout in the menu bar
 - Popover dashboard with per-metric sparklines
 - Top active processes for network, disk, CPU, and GPU
+- CPU/GPU temperature and fan speed monitoring (with animated icons)
 - Install-location check with guidance when not run from `/Applications`
 - No root privileges, no third-party runtime dependencies
 

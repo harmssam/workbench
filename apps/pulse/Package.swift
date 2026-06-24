@@ -14,7 +14,10 @@ let package = Package(
         .executableTarget(
             name: "Pulse",
             path: "Sources/Pulse",
-            exclude: ["Info.plist"]
+            exclude: ["Info.plist"],
+            resources: [
+                .process("Resources")
+            ]
         ),
         .testTarget(
             name: "PulseTests",

@@ -10,7 +10,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     private var cancellables = Set<AnyCancellable>()
 
     private let popoverWidth: CGFloat = 320
-    private let popoverHeight: CGFloat = 534
+    private let popoverHeight: CGFloat = 604
 
     private var lastDisplayedDown = ""
     private var lastDisplayedUp = ""
@@ -55,6 +55,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
             rootView: PopoverView(appState: appState)
                 .frame(width: popoverWidth, height: popoverHeight)
         )
+        popover.contentSize = NSSize(width: popoverWidth, height: popoverHeight)
     }
 
     private func bindAppState() {

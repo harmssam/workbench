@@ -12,7 +12,8 @@ final class AppState: ObservableObject {
     @Published var gpuProcesses: [GPUProcessActivity] = []
     @Published var networkProcesses: [NetworkProcessActivity] = []
     @Published var diskProcesses: [ProcessActivity] = []
-    @Published var isLoading = false
+    @Published var tempSnapshot = TempSnapshot.unavailable
+    @Published var fanSnapshot = FanSnapshot.unavailable
     @Published var lastError: String?
 
     @Published private(set) var networkDownHistory: [Double] = []
@@ -21,11 +22,15 @@ final class AppState: ObservableObject {
     @Published private(set) var diskWriteHistory: [Double] = []
     @Published private(set) var cpuHistory: [Double] = []
     @Published private(set) var gpuHistory: [Double] = []
+    @Published private(set) var cpuTempHistory: [Double] = []
+    @Published private(set) var gpuTempHistory: [Double] = []
 
     let networkMonitor = NetworkMonitor()
     let diskMonitor = DiskMonitor()
     let cpuMonitor = CPUMonitor()
     let gpuMonitor = GPUMonitor()
+    let tempMonitor = TempMonitor()
+    let fanMonitor = FanMonitor()
 
     private var refreshTask: Task<Void, Never>?
     private var downHistory = HistoryBuffer()
@@ -34,6 +39,8 @@ final class AppState: ObservableObject {
     private var diskWriteHistoryBuffer = HistoryBuffer()
     private var cpuHistoryBuffer = HistoryBuffer()
     private var gpuHistoryBuffer = HistoryBuffer()
+    private var cpuTempHistoryBuffer = HistoryBuffer()
+    private var gpuTempHistoryBuffer = HistoryBuffer()
 
     let refreshInterval: TimeInterval = 1.0
 
@@ -41,7 +48,11 @@ final class AppState: ObservableObject {
         let down = ByteFormatter.formatMenuBarMbps(bytesPerSecond: downloadRate)
         let up = ByteFormatter.formatMenuBarMbps(bytesPerSecond: uploadRate)
         let cpu = cpuUsage.isValid ? PercentFormatter.format(cpuUsage.total) : "—"
-        return "↓\(down) ↑\(up) Mbps · CPU \(cpu)"
+        var base = "↓\(down) ↑\(up) Mbps · CPU \(cpu)"
+        if let t = tempSnapshot.cpuTemperature {
+            base += " · \(Int(round(t)))°C"
+        }
+        return base
     }
 
     init() {
@@ -53,7 +64,6 @@ final class AppState: ObservableObject {
     }
 
     func refresh() async {
-        isLoading = true
         lastError = nil
 
         async let networkRates = networkMonitor.sampleRates()
@@ -71,12 +81,13 @@ final class AppState: ObservableObject {
         diskWriteRate = disk.write
         cpuUsage = await cpuMonitor.sampleUsage()
         gpuSnapshot = await gpuMonitor.sample()
+        tempSnapshot = await tempMonitor.sample()
+        fanSnapshot = await fanMonitor.sample()
         self.networkProcesses = await networkProcesses
         self.diskProcesses = await diskProcesses
         self.cpuProcesses = await cpuProcesses
         self.gpuProcesses = await gpuProcesses
         updateHistories()
-        isLoading = false
     }
 
     private func updateHistories() {
@@ -93,12 +104,21 @@ final class AppState: ObservableObject {
             gpuHistoryBuffer.append(utilization)
         }
 
+        if let cpuT = tempSnapshot.cpuTemperature {
+            cpuTempHistoryBuffer.append(cpuT)
+        }
+        if let gpuT = tempSnapshot.gpuTemperature {
+            gpuTempHistoryBuffer.append(gpuT)
+        }
+
         networkDownHistory = downHistory.values
         networkUpHistory = upHistory.values
         diskReadHistory = diskReadHistoryBuffer.values
         diskWriteHistory = diskWriteHistoryBuffer.values
         cpuHistory = cpuHistoryBuffer.values
         gpuHistory = gpuHistoryBuffer.values
+        cpuTempHistory = cpuTempHistoryBuffer.values
+        gpuTempHistory = gpuTempHistoryBuffer.values
     }
 
     private func startMonitoring() {

@@ -59,6 +59,7 @@ struct SparklineView: View {
             }
             .frame(height: 28)
             .frame(maxWidth: .infinity)
+            .drawingGroup()
             .overlay {
                 if values.count < 2 {
                     Text("…")

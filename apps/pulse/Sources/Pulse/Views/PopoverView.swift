@@ -5,7 +5,7 @@ struct PopoverView: View {
     @ObservedObject var appState: AppState
 
     private let popoverWidth: CGFloat = 320
-    private let scrollHeight: CGFloat = 420
+    private let scrollHeight: CGFloat = 490
 
     var body: some View {
         VStack(spacing: 0) {
@@ -15,7 +15,7 @@ struct PopoverView: View {
             Divider()
             footer
         }
-        .frame(width: popoverWidth, height: 534)
+        .frame(width: popoverWidth, height: 604)
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
@@ -25,10 +25,6 @@ struct PopoverView: View {
                 Text("Pulse")
                     .font(.headline)
                 Spacer()
-                if appState.isLoading {
-                    ProgressView()
-                        .controlSize(.small)
-                }
             }
             Text(appState.headerSubtitle)
                 .font(.caption)
@@ -46,6 +42,7 @@ struct PopoverView: View {
                 diskCard
                 cpuCard
                 gpuCard
+                tempCard
             }
             .padding(12)
             .frame(width: popoverWidth)
@@ -94,12 +91,12 @@ struct PopoverView: View {
                 SummaryItem(
                     label: "User",
                     value: appState.cpuUsage.isValid ? PercentFormatter.format(appState.cpuUsage.user) : "—",
-                    tint: .orange
+                    tint: .red.opacity(0.8)
                 ),
                 SummaryItem(
                     label: "System",
                     value: appState.cpuUsage.isValid ? PercentFormatter.format(appState.cpuUsage.system) : "—",
-                    tint: .yellow
+                    tint: .red.opacity(0.6)
                 )
             ],
             sparklines: [
@@ -140,6 +137,52 @@ struct PopoverView: View {
                 ]
             },
             emptyMessage: gpu.isAvailable ? "No active GPU clients" : "GPU metrics unavailable on this system"
+        )
+    }
+
+    private var tempCard: some View {
+        let t = appState.tempSnapshot
+        let f = appState.fanSnapshot
+
+        let summary: [SummaryItem] = [
+            SummaryItem(
+                label: "CPU",
+                value: t.cpuTemperature.map { "\(Int(round($0)))°C" } ?? "—",
+                tint: .orange
+            ),
+            SummaryItem(
+                label: "GPU",
+                value: t.gpuTemperature.map { "\(Int(round($0)))°C" } ?? "—",
+                tint: .orange.opacity(0.75)
+            )
+        ]
+
+        let hasCPU = t.cpuTemperature != nil
+        let hasGPU = t.gpuTemperature != nil
+        let sparklines: [SparklineSpec] = [
+            hasCPU ? SparklineSpec(values: appState.cpuTempHistory, color: .orange, label: "CPU °C") : nil,
+            hasGPU ? SparklineSpec(values: appState.gpuTempHistory, color: .orange.opacity(0.7), label: "GPU °C") : nil
+        ].compactMap { $0 }
+
+        let fanContent: AnyView? = f.isAvailable ? AnyView(
+            HStack(spacing: 14) {
+                ForEach(f.fans) { fan in
+                    FanAnimation(fan: fan)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
+        ) : nil
+
+        let empty = !t.isAvailable && !f.isAvailable
+        return MetricCard(
+            title: "Thermal",
+            icon: "thermometer",
+            summary: summary,
+            sparklines: sparklines,
+            columns: [],
+            rows: [],
+            emptyMessage: empty ? "Thermal sensors unavailable" : nil,
+            afterSparklines: fanContent
         )
     }
 
@@ -256,6 +299,7 @@ private struct MetricCard: View {
     let columns: [MetricColumn]
     let rows: [[String]]
     let emptyMessage: String?
+    let afterSparklines: AnyView?
 
     init(
         title: String,
@@ -265,7 +309,8 @@ private struct MetricCard: View {
         sparklines: [SparklineSpec] = [],
         columns: [MetricColumn],
         rows: [[String]],
-        emptyMessage: String? = nil
+        emptyMessage: String? = nil,
+        afterSparklines: AnyView? = nil
     ) {
         self.title = title
         self.icon = icon
@@ -275,6 +320,7 @@ private struct MetricCard: View {
         self.columns = columns
         self.rows = rows
         self.emptyMessage = emptyMessage
+        self.afterSparklines = afterSparklines
     }
 
     var body: some View {
@@ -310,6 +356,12 @@ private struct MetricCard: View {
                         SparklineView(values: spec.values, color: spec.color, label: spec.label)
                     }
                 }
+            }
+
+            if let content = afterSparklines {
+                content
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 2)
             }
 
             if columns.isEmpty {
@@ -367,7 +419,7 @@ private struct MetricCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(8)
-        .background(item.tint.opacity(0.12))
+        .background(Color.primary.opacity(0.055))
         .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 

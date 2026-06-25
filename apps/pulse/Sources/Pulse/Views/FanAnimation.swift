@@ -15,27 +15,24 @@ struct FanAnimation: View {
 
     @State private var rotation: Double = 0
     @State private var spinBoost: Double = 0
+    /// Blur decays faster than spin so the fan stays visibly spinning after motion blur clears.
+    @State private var blurBoost: Double = 0
     @State private var eggRotation: Double = 0
-
-
-    private var effectiveRPM: Double {
-        let normalized = min(Double(fan.currentRPM) / 5200.0, 1.8)
-        return (normalized + spinBoost) * 5200.0
-    }
 
     // High frequency timer for smooth rotation
     private let timer = Timer.publish(every: 1.0 / 30.0, on: .main, in: .common).autoconnect()
 
+    /// Prior peak was 2.0pt; scale entire curve by 2/3 (~33% reduction).
+    private static let blurScale: Double = 2.0 / 3.0
+
     private var blurRadius: Double {
-        // Blur kicks in above 250 RPM and increases with visual speed.
-        // Uses effective speed (real + easter egg boost) so motion blur
-        // appears during the fast spin and decreases as it winds down.
-        let rpm = effectiveRPM
+        // Blur uses blurBoost (short decay), not spinBoost (long wind-down).
+        let base = min(Double(fan.currentRPM) / 5200.0, 1.8)
+        let rpm = (base + blurBoost) * 5200.0
         if rpm < 250 {
             return 0
         }
-        // Dialed back for realistic motion blur without being too aggressive.
-        return min((rpm - 250) / 2500.0, 2.0)
+        return min((rpm - 250) / 2500.0, 2.0) * Self.blurScale
     }
 
     var body: some View {
@@ -98,15 +95,18 @@ struct FanAnimation: View {
     }
 
     private func triggerEasterEggSpin() {
-        // Quick ramp up to full speed (0.4s), then slower ramp down (4s).
-        // Animate eggRotation for visible spinning in tandem with blur/speed.
+        // Quick ramp up (0.4s). Blur clears in ~0.75s; spin keeps coasting for 4s.
         withAnimation(.linear(duration: 0.4)) {
             spinBoost = 5.0
-            eggRotation += 360 * 8  // quick multi-turn spin
+            blurBoost = 1.0
+            eggRotation += 360 * 8
+        }
+        withAnimation(.easeOut(duration: 0.75).delay(0.4)) {
+            blurBoost = 0
         }
         withAnimation(.easeOut(duration: 4.0).delay(0.4)) {
             spinBoost = 0
-            eggRotation += 360 * 4  // additional turns during wind-down
+            eggRotation += 360 * 4
         }
     }
 }

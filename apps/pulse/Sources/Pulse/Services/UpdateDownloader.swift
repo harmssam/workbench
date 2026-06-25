@@ -40,6 +40,12 @@ enum UpdateDownloader {
             throw DownloadError.badHTTPStatus(httpResponse.statusCode)
         }
 
+        if let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type")?.lowercased(),
+           contentType.contains("text/html") {
+            AppLogger.error("Update download returned HTML (likely an error page), not a zip", category: AppLogger.update)
+            throw DownloadError.invalidArchive
+        }
+
         let expectedSize = httpResponse.value(forHTTPHeaderField: "Content-Length").flatMap(Int64.init)
         if let expectedSize {
             AppLogger.debug("Download size: \(expectedSize) bytes", category: AppLogger.update)

@@ -30,13 +30,7 @@ final class AppState: ObservableObject {
     @Published private(set) var gpuTempHistory: [Double] = []
     @Published private(set) var memoryUsedHistory: [Double] = []
 
-    let networkMonitor = NetworkMonitor()
-    let diskMonitor = DiskMonitor()
-    let cpuMonitor = CPUMonitor()
-    let gpuMonitor = GPUMonitor()
-    let tempMonitor = TempMonitor()
-    let fanMonitor = FanMonitor()
-    let memoryMonitor = MemoryMonitor()
+    private let collector = MonitorCollector()
 
     private lazy var updateManager = UpdateManager(
         currentVersion: Self.currentAppVersion
@@ -184,60 +178,31 @@ final class AppState: ObservableObject {
         updateTask?.cancel()
     }
 
-    func refresh() async {
-        CrashReporter.breadcrumb("AppState.refresh start")
+    private func applyRates(_ rates: RefreshRates) {
+        downloadRate = rates.downloadRate
+        uploadRate = rates.uploadRate
+    }
 
-        async let networkRates = networkMonitor.sampleRates()
-        async let diskRates = diskMonitor.sampleRates()
-        async let sampledNetworkProcesses = networkMonitor.sampleProcesses()
-        async let sampledDiskProcesses = diskMonitor.sampleProcesses()
-        async let sampledCPUProcesses = cpuMonitor.sampleProcesses()
-        async let sampledGPUProcesses = gpuMonitor.sampleProcesses()
-        async let sampledMemorySnapshot = memoryMonitor.sample()
-        async let sampledMemoryProcesses = memoryMonitor.sampleTopMemoryProcesses()
-        async let sampledCPUUsage = cpuMonitor.sampleUsage()
-        async let sampledGPUSnapshot = gpuMonitor.sample()
-        async let sampledTempSnapshot = tempMonitor.sample()
-        async let sampledFanSnapshot = fanMonitor.sample()
-
-        // Await every sample before touching @Published state. Publishing menu bar
-        // rates mid-refresh re-enters MainActor (Combine → status item) during long
-        // nettop awaits and has caused SIGTRAP (see v0.2.10).
-        CrashReporter.breadcrumb("AppState.refresh: awaiting samples")
-        let rates = await networkRates
-        let disk = await diskRates
-        let netProcs = await sampledNetworkProcesses
-        let diskProcs = await sampledDiskProcesses
-        let cpuProcs = await sampledCPUProcesses
-        let gpuProcs = await sampledGPUProcesses
-        let memSnap = await sampledMemorySnapshot
-        let memProcs = await sampledMemoryProcesses
-        let cpu = await sampledCPUUsage
-        let gpu = await sampledGPUSnapshot
-        let temp = await sampledTempSnapshot
-        let fans = await sampledFanSnapshot
-
+    private func applyDetails(_ rates: RefreshRates, _ details: RefreshDetails) {
         CrashReporter.breadcrumb("AppState.refresh: applying state")
-        downloadRate = rates.bytesIn
-        uploadRate = rates.bytesOut
         var metrics = cachedPopoverMetrics
         metrics.lastError = nil
-        metrics.diskReadRate = disk.read
-        metrics.diskWriteRate = disk.write
-        metrics.cpuUsage = cpu
-        metrics.gpuSnapshot = gpu
-        metrics.tempSnapshot = temp
-        metrics.fanSnapshot = fans
-        metrics.networkProcesses = netProcs
-        metrics.diskProcesses = diskProcs
-        metrics.cpuProcesses = cpuProcs
-        metrics.gpuProcesses = gpuProcs
-        metrics.memorySnapshot = memSnap
-        metrics.memoryProcesses = memProcs
+        metrics.diskReadRate = rates.diskReadRate
+        metrics.diskWriteRate = rates.diskWriteRate
+        metrics.cpuUsage = details.cpuUsage
+        metrics.gpuSnapshot = details.gpuSnapshot
+        metrics.tempSnapshot = details.tempSnapshot
+        metrics.fanSnapshot = details.fanSnapshot
+        metrics.networkProcesses = details.networkProcesses
+        metrics.diskProcesses = details.diskProcesses
+        metrics.cpuProcesses = details.cpuProcesses
+        metrics.gpuProcesses = details.gpuProcesses
+        metrics.memorySnapshot = details.memorySnapshot
+        metrics.memoryProcesses = details.memoryProcesses
         appendHistoryBuffers(
             using: metrics,
-            downloadRate: rates.bytesIn,
-            uploadRate: rates.bytesOut
+            downloadRate: rates.downloadRate,
+            uploadRate: rates.uploadRate
         )
         metrics.networkDownHistory = downHistory.values
         metrics.networkUpHistory = upHistory.values
@@ -312,10 +277,24 @@ final class AppState: ObservableObject {
     }
 
     private func startMonitoring() {
-        refreshTask = Task { [weak self] in
+        let collector = collector
+        let interval = refreshInterval
+        refreshTask = Task.detached(priority: .utility) { [weak self] in
             while !Task.isCancelled {
-                await self?.refresh()
-                try? await Task.sleep(for: .seconds(self?.refreshInterval ?? 1))
+                guard let self else { return }
+                CrashReporter.breadcrumb("AppState.refresh start")
+
+                let rates = await collector.collectRates()
+                await MainActor.run {
+                    self.applyRates(rates)
+                }
+
+                let details = await collector.collectDetails()
+                await MainActor.run {
+                    self.applyDetails(rates, details)
+                }
+
+                try? await Task.sleep(for: .seconds(interval))
             }
         }
 
@@ -453,9 +432,9 @@ final class AppState: ObservableObject {
     func purgeMemory() async {
         let aggressive = aggressivePurge
         AppLogger.debug("Purging inactive memory (aggressive: \(aggressive))...", category: AppLogger.monitor)
-        let success = await memoryMonitor.purge(aggressive: aggressive)
+        let success = await collector.purgeMemory(aggressive: aggressive)
         if success {
-            let snapshot = await memoryMonitor.sample()
+            let snapshot = await collector.sampleMemory()
             cachedPopoverMetrics.memorySnapshot = snapshot
             if isPopoverShown {
                 memorySnapshot = snapshot

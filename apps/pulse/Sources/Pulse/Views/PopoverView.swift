@@ -6,9 +6,32 @@ enum PopoverLayout {
     static let scrollHeight: CGFloat = 490
 }
 
+private struct MetricCardHeightPreferenceKey: PreferenceKey {
+    static let defaultValue: [MetricCardKind: CGFloat] = [:]
+
+    static func reduce(value: inout [MetricCardKind: CGFloat], nextValue: () -> [MetricCardKind: CGFloat]) {
+        value.merge(nextValue()) { _, new in new }
+    }
+}
+
 struct PopoverView: View {
     @ObservedObject var appState: AppState
+    @StateObject private var dragCoordinator = MetricCardDragCoordinator()
     @State private var draggingCard: MetricCardKind?
+    @State private var dropInsertionIndex: Int?
+    @State private var cardHeights: [MetricCardKind: CGFloat] = [:]
+    @State private var scrollViewportFrame: CGRect = .zero
+    @State private var scrollStepIndex: Int = 0
+    @State private var dropLandingCard: MetricCardKind?
+    @State private var dropLandingSettled = false
+    @State private var dropLandingTask: Task<Void, Never>?
+
+    private var autoscrollRailHeight: CGFloat {
+        max(56, PopoverLayout.scrollHeight * 0.20)
+    }
+
+    private let cardStackSpacing: CGFloat = 12
+    private let cardGapHitHeight: CGFloat = 22
     @State private var isQuitHovered = false
     @State private var isSettingsHovered = false
     @State private var showSettings = false
@@ -23,7 +46,7 @@ struct PopoverView: View {
         }
         .frame(width: PopoverLayout.width)
         .fixedSize(horizontal: false, vertical: true)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .pulsePopoverChrome()
         .sheet(isPresented: $showSettings) {
             SettingsView(appState: appState)
         }
@@ -56,6 +79,7 @@ struct PopoverView: View {
                             .foregroundStyle(.orange)
                     }
                     .buttonStyle(.borderless)
+                    .focusable(false)
                     .help(appState.updateStatus ?? "Update failed — tap to retry")
                 } else if !appState.autoUpdateEnabled, let update = appState.availableUpdate {
                     Button {
@@ -66,6 +90,7 @@ struct PopoverView: View {
                             .foregroundStyle(.blue)
                     }
                     .buttonStyle(.borderless)
+                    .focusable(false)
                     .help("Click to update to version \(update.version)")
                 } else if appState.isDownloadingUpdate {
                     HStack(spacing: 4) {
@@ -96,33 +121,248 @@ struct PopoverView: View {
     }
 
     private var cardScroller: some View {
-        ScrollView(.vertical, showsIndicators: true) {
-            Group {
-                if appState.isPopoverShown {
-                    LazyVStack(spacing: 12) {
-                        ForEach(appState.metricCardOrder) { kind in
-                            reorderableSection(for: kind)
+        ScrollViewReader { scrollProxy in
+            ScrollView(.vertical, showsIndicators: true) {
+                Group {
+                    if appState.isPopoverShown {
+                        LazyVStack(spacing: cardStackSpacing) {
+                            ScrollViewAnchor(
+                                dragCoordinator: dragCoordinator,
+                                screenFrame: $scrollViewportFrame
+                            )
+                            .frame(height: 1)
+
+                            ForEach(Array(appState.metricCardOrder.enumerated()), id: \.element) { index, kind in
+                                CardGapDropZone(
+                                    insertionIndex: index,
+                                    isActive: dropInsertionIndex == index,
+                                    isDragging: draggingCard != nil,
+                                    hitHeight: cardGapHitHeight,
+                                    order: $appState.metricCardOrder,
+                                    dragging: $draggingCard,
+                                    dropInsertionIndex: $dropInsertionIndex,
+                                    dragCoordinator: dragCoordinator
+                                )
+                                reorderableSection(for: kind, index: index)
+                                    .id(kind)
+                            }
+                            CardGapDropZone(
+                                insertionIndex: appState.metricCardOrder.count,
+                                isActive: dropInsertionIndex == appState.metricCardOrder.count,
+                                isDragging: draggingCard != nil,
+                                hitHeight: cardGapHitHeight,
+                                order: $appState.metricCardOrder,
+                                dragging: $draggingCard,
+                                dropInsertionIndex: $dropInsertionIndex,
+                                dragCoordinator: dragCoordinator
+                            )
+                            bottomDropZone
                         }
+                        .animation(nil, value: draggingCard)
                     }
                 }
+                .padding(12)
+                .frame(width: PopoverLayout.width)
+                .background(scrollGapDropLayer)
+                .onPreferenceChange(MetricCardHeightPreferenceKey.self) { heights in
+                    cardHeights.merge(heights) { _, new in new }
+                }
             }
-            .padding(12)
-            .frame(width: PopoverLayout.width)
+            .frame(width: PopoverLayout.width, height: PopoverLayout.scrollHeight, alignment: .top)
+            .background(AlwaysVisibleScrollBar())
+            .overlay {
+                ScrollViewportTracker(screenFrame: $scrollViewportFrame)
+                    .allowsHitTesting(false)
+            }
+            .overlay { dragAutoscrollRails }
+            .onAppear {
+                configureDragCoordinator(scrollProxy: scrollProxy)
+            }
+            .onChange(of: draggingCard) { _, newValue in
+                configureDragCoordinator(scrollProxy: scrollProxy)
+                if let kind = newValue,
+                   let index = appState.metricCardOrder.firstIndex(of: kind) {
+                    dropLandingTask?.cancel()
+                    dropLandingCard = nil
+                    dropLandingSettled = false
+                    scrollStepIndex = index
+                    beginDragSession()
+                } else {
+                    dropInsertionIndex = nil
+                    dragCoordinator.reset()
+                }
+            }
         }
-        .frame(width: PopoverLayout.width, height: PopoverLayout.scrollHeight, alignment: .top)
-        .background(AlwaysVisibleScrollBar())
     }
 
-    private func reorderableSection(for kind: MetricCardKind) -> some View {
-        let grabber = CardGrabber(kind: kind, dragging: $draggingCard)
+    private func configureDragCoordinator(scrollProxy: ScrollViewProxy) {
+        dragCoordinator.configure(
+            viewportFrame: { scrollViewportFrame },
+            viewportHeight: PopoverLayout.scrollHeight,
+            onScrollFallback: { direction in
+                let order = appState.metricCardOrder
+                guard !order.isEmpty else { return }
+
+                let base = dropInsertionIndex ?? scrollStepIndex
+                let nextIndex = max(0, min(order.count - 1, base + direction))
+                guard nextIndex != scrollStepIndex else { return }
+
+                scrollStepIndex = nextIndex
+                let target = order[nextIndex]
+                withAnimation(.easeInOut(duration: 0.22)) {
+                    scrollProxy.scrollTo(target, anchor: direction < 0 ? .top : .bottom)
+                }
+            },
+            onCardDropped: { kind in
+                triggerDropLanding(for: kind)
+            }
+        )
+    }
+
+    private func triggerDropLanding(for kind: MetricCardKind) {
+        dropLandingTask?.cancel()
+        dropLandingCard = kind
+        dropLandingSettled = false
+
+        dropLandingTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(16))
+            guard !Task.isCancelled else { return }
+            withAnimation(PopoverDropAnimation.landing) {
+                dropLandingSettled = true
+            }
+            try? await Task.sleep(for: .milliseconds(280))
+            guard !Task.isCancelled, dropLandingCard == kind else { return }
+            dropLandingCard = nil
+            dropLandingSettled = false
+        }
+    }
+
+    private func cardDragAppearance(for kind: MetricCardKind) -> (opacity: Double, scale: CGFloat) {
+        if draggingCard == kind {
+            return (0.55, 0.97)
+        }
+        if dropLandingCard == kind {
+            return dropLandingSettled ? (1.0, 1.0) : (1.0, 0.98)
+        }
+        return (1.0, 1.0)
+    }
+
+    private var scrollGapDropLayer: some View {
+        Group {
+            if draggingCard != nil {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onDrop(
+                        of: [.plainText],
+                        delegate: ScrollGapDropDelegate(
+                            order: $appState.metricCardOrder,
+                            dragging: $draggingCard,
+                            dropInsertionIndex: $dropInsertionIndex,
+                            dragCoordinator: dragCoordinator
+                        )
+                    )
+            }
+        }
+    }
+
+    private func beginDragSession() {
+        dragCoordinator.beginDragSession(
+            order: $appState.metricCardOrder,
+            dragging: $draggingCard,
+            dropInsertionIndex: $dropInsertionIndex
+        )
+    }
+
+    private var dragAutoscrollRails: some View {
+        Group {
+            if draggingCard != nil {
+                VStack(spacing: 0) {
+                    Color.clear
+                        .frame(height: autoscrollRailHeight)
+                        .contentShape(Rectangle())
+                        .onDrop(
+                            of: [.plainText],
+                            delegate: EdgeAutoscrollDropDelegate(
+                                insertionIndex: 0,
+                                order: $appState.metricCardOrder,
+                                dragging: $draggingCard,
+                                dropInsertionIndex: $dropInsertionIndex,
+                                dragCoordinator: dragCoordinator
+                            )
+                        )
+                    Spacer()
+                        .allowsHitTesting(false)
+                    Color.clear
+                        .frame(height: autoscrollRailHeight)
+                        .contentShape(Rectangle())
+                        .onDrop(
+                            of: [.plainText],
+                            delegate: EdgeAutoscrollDropDelegate(
+                                insertionIndex: appState.metricCardOrder.count,
+                                order: $appState.metricCardOrder,
+                                dragging: $draggingCard,
+                                dropInsertionIndex: $dropInsertionIndex,
+                                dragCoordinator: dragCoordinator
+                            )
+                        )
+                }
+            }
+        }
+    }
+
+    private var bottomDropZone: some View {
+        Color.clear
+            .frame(height: 0)
+            .overlay(alignment: .top) {
+                if draggingCard != nil {
+                    Color.clear
+                        .frame(height: 28)
+                        .contentShape(Rectangle())
+                        .onDrop(
+                            of: [.plainText],
+                            delegate: BottomMetricCardDropDelegate(
+                                order: $appState.metricCardOrder,
+                                dragging: $draggingCard,
+                                dropInsertionIndex: $dropInsertionIndex,
+                                dragCoordinator: dragCoordinator
+                            )
+                        )
+                }
+            }
+            .allowsHitTesting(draggingCard != nil)
+    }
+
+    private func reorderableSection(for kind: MetricCardKind, index: Int) -> some View {
+        let grabber = CardGrabber(
+            kind: kind,
+            dragging: $draggingCard,
+            onDragBegan: { beginDragSession() }
+        )
+        let appearance = cardDragAppearance(for: kind)
+
         return cardContent(for: kind, grabber: AnyView(grabber))
-            .opacity(draggingCard == kind ? 0.55 : 1)
+            .opacity(appearance.opacity)
+            .scaleEffect(appearance.scale)
+            .animation(.easeOut(duration: 0.12), value: draggingCard)
+            .animation(PopoverDropAnimation.landing, value: dropLandingSettled)
+            .animation(PopoverDropAnimation.landing, value: dropLandingCard)
+            .background(
+                GeometryReader { proxy in
+                    Color.clear.preference(
+                        key: MetricCardHeightPreferenceKey.self,
+                        value: [kind: proxy.size.height]
+                    )
+                }
+            )
             .onDrop(
                 of: [.plainText],
                 delegate: MetricCardReorderDelegate(
                     card: kind,
+                    cardHeight: cardHeights[kind] ?? 120,
                     order: $appState.metricCardOrder,
-                    dragging: $draggingCard
+                    dragging: $draggingCard,
+                    dropInsertionIndex: $dropInsertionIndex,
+                    dragCoordinator: dragCoordinator
                 )
             )
     }
@@ -435,6 +675,7 @@ struct PopoverView: View {
                 NSWorkspace.shared.selectFile(AppLogger.logFileURL.path, inFileViewerRootedAtPath: "")
             }
             .buttonStyle(.borderless)
+            .focusable(false)
             .font(.caption2)
             .help("Open Pulse log file")
 
@@ -447,6 +688,7 @@ struct PopoverView: View {
                     .monospacedDigit()
             }
             .buttonStyle(.borderless)
+            .focusable(false)
             .help("Check for updates")
         }
         .padding(.horizontal, 14)
@@ -530,6 +772,8 @@ private struct MetricCard: View {
     let afterSparklines: AnyView?
     let trailingHeader: AnyView?
 
+    @State private var isProcessListExpanded = false
+
     init(
         title: String,
         icon: String,
@@ -609,38 +853,70 @@ private struct MetricCard: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.vertical, 4)
                 }
-            } else if rows.isEmpty {
-                Text(emptyMessage ?? "No activity")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 4)
             } else {
-                VStack(spacing: 0) {
-                    tableHeader
-                    Divider()
-                    ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
-                        tableRow(row, shaded: index.isMultiple(of: 2))
-                        if index < rows.count - 1 {
-                            Divider().opacity(0.35)
-                        }
-                    }
-                }
-                .background(Color.primary.opacity(0.05))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                processListSection
             }
         }
         .padding(10)
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.55))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .pulseCardGlass()
     }
 
     private var accentColor: Color {
         summary.first?.tint ?? .accentColor
+    }
+
+    private var processListLabel: String {
+        if rows.isEmpty {
+            return "Processes"
+        }
+        return "Processes (\(rows.count))"
+    }
+
+    private var processListSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isProcessListExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(isProcessListExpanded ? 90 : 0))
+                    Text(processListLabel)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(isProcessListExpanded ? "Collapse process list" : "Expand process list")
+
+            if isProcessListExpanded {
+                if rows.isEmpty {
+                    Text(emptyMessage ?? "No activity")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 4)
+                } else {
+                    VStack(spacing: 0) {
+                        tableHeader
+                        Divider()
+                        ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+                            tableRow(row, shaded: index.isMultiple(of: 2))
+                            if index < rows.count - 1 {
+                                Divider().opacity(0.35)
+                            }
+                        }
+                    }
+                    .pulseInsetSurface(cornerRadius: 6)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+            }
+        }
     }
 
     private func summaryTile(_ item: SummaryItem) -> some View {
@@ -657,8 +933,7 @@ private struct MetricCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(4)
-        .background(Color.primary.opacity(0.055))
-        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .pulseInsetSurface(cornerRadius: 6)
     }
 
     private var tableHeader: some View {

@@ -54,6 +54,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         let fittingSize = hosting.sizeThatFits(
             in: NSSize(width: PopoverLayout.width, height: CGFloat.greatestFiniteMagnitude)
         )
+        PulseHostingChrome.applyTransparentPopoverBackground(to: hosting)
         popover.contentViewController = hosting
         popover.contentSize = NSSize(width: PopoverLayout.width, height: fittingSize.height)
     }

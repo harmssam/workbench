@@ -18,7 +18,7 @@ struct SettingsView: View {
             .scrollContentBackground(.hidden)
         }
         .frame(width: 320)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .pulsePopoverChrome()
     }
 
     private var header: some View {

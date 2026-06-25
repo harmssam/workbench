@@ -7,16 +7,28 @@ enum ProcessRunner {
         case nonZeroExit(Int32)
     }
 
-    private class ResumeState: @unchecked Sendable {
+    private final class FinishState: @unchecked Sendable {
         private let lock = NSLock()
-        private var didResume = false
+        private var didFinish = false
+        private let outputHandle: FileHandle
+        private let continuation: CheckedContinuation<String, Error>
 
-        func resumeOnce(_ action: () -> Void) {
+        init(outputHandle: FileHandle, continuation: CheckedContinuation<String, Error>) {
+            self.outputHandle = outputHandle
+            self.continuation = continuation
+        }
+
+        func complete(with result: Result<String, Error>) {
             lock.lock()
             defer { lock.unlock() }
-            if !didResume {
-                didResume = true
-                action()
+            guard !didFinish else { return }
+            didFinish = true
+            outputHandle.closeFile()
+            switch result {
+            case .success(let output):
+                continuation.resume(returning: output)
+            case .failure(let error):
+                continuation.resume(throwing: error)
             }
         }
     }
@@ -26,42 +38,39 @@ enum ProcessRunner {
         arguments: [String] = [],
         timeout: TimeInterval = 5
     ) async throws -> String {
-        let process = Process()
-        let pipe = Pipe()
+        try await withCheckedThrowingContinuation { continuation in
+            let process = Process()
+            let pipe = Pipe()
+            let outputHandle = pipe.fileHandleForReading
 
-        process.executableURL = URL(fileURLWithPath: executable)
-        process.arguments = arguments
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
+            process.executableURL = URL(fileURLWithPath: executable)
+            process.arguments = arguments
+            process.standardOutput = pipe
+            process.standardError = FileHandle.nullDevice
 
-        try process.run()
+            let state = FinishState(outputHandle: outputHandle, continuation: continuation)
 
-        return try await withCheckedThrowingContinuation { continuation in
-            let deadline = DispatchTime.now() + timeout
-
-            let state = ResumeState()
-
-            DispatchQueue.global(qos: .utility).asyncAfter(deadline: deadline) {
-                if process.isRunning {
-                    process.terminate()
-                    state.resumeOnce {
-                        continuation.resume(throwing: RunnerError.timedOut)
-                    }
+            process.terminationHandler = { proc in
+                let data = outputHandle.readDataToEndOfFile()
+                let output = String(data: data, encoding: .utf8) ?? ""
+                if proc.terminationStatus == 0 {
+                    state.complete(with: .success(output))
+                } else {
+                    state.complete(with: .failure(RunnerError.nonZeroExit(proc.terminationStatus)))
                 }
             }
 
-            process.terminationHandler = { proc in
-                if proc.terminationStatus == 0 {
-                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                    let output = String(data: data, encoding: .utf8) ?? ""
-                    state.resumeOnce {
-                        continuation.resume(returning: output)
-                    }
-                } else {
-                    state.resumeOnce {
-                        continuation.resume(throwing: RunnerError.nonZeroExit(proc.terminationStatus))
-                    }
-                }
+            do {
+                try process.run()
+            } catch {
+                state.complete(with: .failure(RunnerError.launchFailed))
+                return
+            }
+
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout) {
+                guard process.isRunning else { return }
+                process.terminate()
+                state.complete(with: .failure(RunnerError.timedOut))
             }
         }
     }

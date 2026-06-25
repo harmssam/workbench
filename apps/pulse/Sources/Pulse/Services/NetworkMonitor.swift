@@ -10,6 +10,9 @@ actor NetworkMonitor {
     private var previousStats: [String: InterfaceStats] = [:]
     private var previousTimestamp: Date?
     private var previousProcessBytes: [String: (bytesIn: UInt64, bytesOut: UInt64, pid: Int32)] = [:]
+    private var cachedProcesses: [NetworkProcessActivity] = []
+    private var lastProcessSampleTime: Date?
+    private let processSampleInterval: TimeInterval = 3
 
     func sampleRates() async -> (bytesIn: UInt64, bytesOut: UInt64) {
         let current = await readInterfaceStats()
@@ -43,6 +46,13 @@ actor NetworkMonitor {
     }
 
     func sampleProcesses(limit: Int = 5) async -> [NetworkProcessActivity] {
+        let now = Date()
+        if let lastSample = lastProcessSampleTime,
+           now.timeIntervalSince(lastSample) < processSampleInterval {
+            return cachedProcesses
+        }
+
+        CrashReporter.breadcrumb("NetworkMonitor.sampleProcesses: nettop start")
         guard let output = try? await ProcessRunner.run(
             executable: "/usr/bin/nettop",
             arguments: [
@@ -50,10 +60,12 @@ actor NetworkMonitor {
                 "-k", "time,interface,state,rx_dupe,rx_ooo,re-tx,rtt_avg,rcvsize,tx_win,tc_class,tc_mgt,cc_algo,P,C,R,W,arch",
                 "-t", "external"
             ],
-            timeout: 10
+            timeout: 5
         ) else {
-            return []
+            CrashReporter.breadcrumb("NetworkMonitor.sampleProcesses: nettop failed")
+            return cachedProcesses
         }
+        CrashReporter.breadcrumb("NetworkMonitor.sampleProcesses: nettop done")
 
         let current = parseNettopOutput(output)
         var activities: [NetworkProcessActivity] = []
@@ -78,11 +90,13 @@ actor NetworkMonitor {
         }
 
         previousProcessBytes = current
+        lastProcessSampleTime = now
 
-        return activities
+        cachedProcesses = activities
             .sorted { $0.totalRate > $1.totalRate }
             .prefix(limit)
             .map { $0 }
+        return cachedProcesses
     }
 
     private func readInterfaceStats() async -> [InterfaceStats] {

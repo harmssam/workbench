@@ -55,7 +55,7 @@ final class AppState: ObservableObject {
            !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return v.trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        return "0.2.9"
+        return "0.2.10"
     }
     @Published var availableUpdate: AppUpdate?
     @Published var isDownloadingUpdate = false
@@ -83,7 +83,13 @@ final class AppState: ObservableObject {
         }
     }
 
-    @Published var isPopoverShown = false
+    @Published var isPopoverShown = false {
+        didSet {
+            if isPopoverShown {
+                publishCachedPopoverMetrics()
+            }
+        }
+    }
 
     @Published var metricCardOrder: [MetricCardKind] = MetricCardKind.loadSavedOrder() {
         didSet {
@@ -102,6 +108,35 @@ final class AppState: ObservableObject {
     private var cpuTempHistoryBuffer = HistoryBuffer()
     private var gpuTempHistoryBuffer = HistoryBuffer()
     private var memoryUsedHistoryBuffer = HistoryBuffer()
+
+    /// Popover-only metrics collected every refresh but published only while the popover is open.
+    /// Avoids SwiftUI re-rendering the hidden hosting view during MainActor suspension at `await`.
+    private struct CachedPopoverMetrics {
+        var diskReadRate: UInt64 = 0
+        var diskWriteRate: UInt64 = 0
+        var cpuUsage = CPUUsageSample.invalid
+        var cpuProcesses: [CPUProcessActivity] = []
+        var gpuSnapshot = GPUSnapshot.unavailable
+        var gpuProcesses: [GPUProcessActivity] = []
+        var networkProcesses: [NetworkProcessActivity] = []
+        var diskProcesses: [ProcessActivity] = []
+        var tempSnapshot = TempSnapshot.unavailable
+        var fanSnapshot = FanSnapshot.unavailable
+        var memorySnapshot = MemorySnapshot.unavailable
+        var memoryProcesses: [MemoryProcessActivity] = []
+        var lastError: String?
+        var networkDownHistory: [Double] = []
+        var networkUpHistory: [Double] = []
+        var diskReadHistory: [Double] = []
+        var diskWriteHistory: [Double] = []
+        var cpuHistory: [Double] = []
+        var gpuHistory: [Double] = []
+        var cpuTempHistory: [Double] = []
+        var gpuTempHistory: [Double] = []
+        var memoryUsedHistory: [Double] = []
+    }
+
+    private var cachedPopoverMetrics = CachedPopoverMetrics()
 
     let refreshInterval: TimeInterval = 1.0
 
@@ -135,81 +170,122 @@ final class AppState: ObservableObject {
     }
 
     func refresh() async {
-        lastError = nil
         CrashReporter.breadcrumb("AppState.refresh start")
 
         async let networkRates = networkMonitor.sampleRates()
         async let diskRates = diskMonitor.sampleRates()
-        async let networkProcesses = networkMonitor.sampleProcesses()
-        async let diskProcesses = diskMonitor.sampleProcesses()
-        async let cpuProcesses = cpuMonitor.sampleProcesses()
-        async let gpuProcesses = gpuMonitor.sampleProcesses()
-        async let memorySnapshot = memoryMonitor.sample()
-        async let memoryProcesses = memoryMonitor.sampleTopMemoryProcesses()
+        async let sampledNetworkProcesses = networkMonitor.sampleProcesses()
+        async let sampledDiskProcesses = diskMonitor.sampleProcesses()
+        async let sampledCPUProcesses = cpuMonitor.sampleProcesses()
+        async let sampledGPUProcesses = gpuMonitor.sampleProcesses()
+        async let sampledMemorySnapshot = memoryMonitor.sample()
+        async let sampledMemoryProcesses = memoryMonitor.sampleTopMemoryProcesses()
+        async let sampledCPUUsage = cpuMonitor.sampleUsage()
+        async let sampledGPUSnapshot = gpuMonitor.sample()
+        async let sampledTempSnapshot = tempMonitor.sample()
+        async let sampledFanSnapshot = fanMonitor.sample()
 
         let rates = await networkRates
         let disk = await diskRates
         downloadRate = rates.bytesIn
         uploadRate = rates.bytesOut
-        diskReadRate = disk.read
-        diskWriteRate = disk.write
-        cpuUsage = await cpuMonitor.sampleUsage()
-        gpuSnapshot = await gpuMonitor.sample()
-        CrashReporter.breadcrumb("AppState.refresh: tempMonitor")
-        tempSnapshot = await tempMonitor.sample()
-        CrashReporter.breadcrumb("AppState.refresh: fanMonitor")
-        fanSnapshot = await fanMonitor.sample()
-        CrashReporter.breadcrumb("AppState.refresh: fanMonitor done")
-        CrashReporter.breadcrumb("AppState.refresh: networkProcesses")
-        self.networkProcesses = await networkProcesses
-        CrashReporter.breadcrumb("AppState.refresh: diskProcesses")
-        self.diskProcesses = await diskProcesses
-        CrashReporter.breadcrumb("AppState.refresh: cpuProcesses")
-        self.cpuProcesses = await cpuProcesses
-        CrashReporter.breadcrumb("AppState.refresh: gpuProcesses")
-        self.gpuProcesses = await gpuProcesses
-        CrashReporter.breadcrumb("AppState.refresh: memorySnapshot")
-        self.memorySnapshot = await memorySnapshot
-        self.memoryProcesses = await memoryProcesses
-        CrashReporter.breadcrumb("AppState.refresh: updateHistories")
-        updateHistories()
+
+        CrashReporter.breadcrumb("AppState.refresh: awaiting process samples")
+        let netProcs = await sampledNetworkProcesses
+        let diskProcs = await sampledDiskProcesses
+        let cpuProcs = await sampledCPUProcesses
+        let gpuProcs = await sampledGPUProcesses
+        let memSnap = await sampledMemorySnapshot
+        let memProcs = await sampledMemoryProcesses
+
+        CrashReporter.breadcrumb("AppState.refresh: awaiting hardware samples")
+        let cpu = await sampledCPUUsage
+        let gpu = await sampledGPUSnapshot
+        let temp = await sampledTempSnapshot
+        let fans = await sampledFanSnapshot
+
+        CrashReporter.breadcrumb("AppState.refresh: applying state")
+        var metrics = cachedPopoverMetrics
+        metrics.lastError = nil
+        metrics.diskReadRate = disk.read
+        metrics.diskWriteRate = disk.write
+        metrics.cpuUsage = cpu
+        metrics.gpuSnapshot = gpu
+        metrics.tempSnapshot = temp
+        metrics.fanSnapshot = fans
+        metrics.networkProcesses = netProcs
+        metrics.diskProcesses = diskProcs
+        metrics.cpuProcesses = cpuProcs
+        metrics.gpuProcesses = gpuProcs
+        metrics.memorySnapshot = memSnap
+        metrics.memoryProcesses = memProcs
+        appendHistoryBuffers(using: metrics)
+        metrics.networkDownHistory = downHistory.values
+        metrics.networkUpHistory = upHistory.values
+        metrics.diskReadHistory = diskReadHistoryBuffer.values
+        metrics.diskWriteHistory = diskWriteHistoryBuffer.values
+        metrics.cpuHistory = cpuHistoryBuffer.values
+        metrics.gpuHistory = gpuHistoryBuffer.values
+        metrics.cpuTempHistory = cpuTempHistoryBuffer.values
+        metrics.gpuTempHistory = gpuTempHistoryBuffer.values
+        metrics.memoryUsedHistory = memoryUsedHistoryBuffer.values
+        cachedPopoverMetrics = metrics
+        if isPopoverShown {
+            publishCachedPopoverMetrics()
+        }
         CrashReporter.breadcrumb("AppState.refresh: complete")
     }
 
-    private func updateHistories() {
+    private func appendHistoryBuffers(using metrics: CachedPopoverMetrics) {
         downHistory.append(ByteFormatter.megabitsPerSecond(from: downloadRate))
         upHistory.append(ByteFormatter.megabitsPerSecond(from: uploadRate))
-        diskReadHistoryBuffer.append(Double(diskReadRate))
-        diskWriteHistoryBuffer.append(Double(diskWriteRate))
+        diskReadHistoryBuffer.append(Double(metrics.diskReadRate))
+        diskWriteHistoryBuffer.append(Double(metrics.diskWriteRate))
 
-        if cpuUsage.isValid {
-            cpuHistoryBuffer.append(cpuUsage.total)
+        if metrics.cpuUsage.isValid {
+            cpuHistoryBuffer.append(metrics.cpuUsage.total)
         }
 
-        if let utilization = gpuSnapshot.utilization {
+        if let utilization = metrics.gpuSnapshot.utilization {
             gpuHistoryBuffer.append(utilization)
         }
 
-        if let cpuT = tempSnapshot.cpuTemperature {
+        if let cpuT = metrics.tempSnapshot.cpuTemperature {
             cpuTempHistoryBuffer.append(cpuT)
         }
-        if let gpuT = tempSnapshot.gpuTemperature {
+        if let gpuT = metrics.tempSnapshot.gpuTemperature {
             gpuTempHistoryBuffer.append(gpuT)
         }
 
-        if memorySnapshot.isValid {
-            memoryUsedHistoryBuffer.append(Double(memorySnapshot.used))
+        if metrics.memorySnapshot.isValid {
+            memoryUsedHistoryBuffer.append(Double(metrics.memorySnapshot.used))
         }
+    }
 
-        networkDownHistory = downHistory.values
-        networkUpHistory = upHistory.values
-        diskReadHistory = diskReadHistoryBuffer.values
-        diskWriteHistory = diskWriteHistoryBuffer.values
-        cpuHistory = cpuHistoryBuffer.values
-        gpuHistory = gpuHistoryBuffer.values
-        cpuTempHistory = cpuTempHistoryBuffer.values
-        gpuTempHistory = gpuTempHistoryBuffer.values
-        memoryUsedHistory = memoryUsedHistoryBuffer.values
+    private func publishCachedPopoverMetrics() {
+        let metrics = cachedPopoverMetrics
+        diskReadRate = metrics.diskReadRate
+        diskWriteRate = metrics.diskWriteRate
+        cpuUsage = metrics.cpuUsage
+        cpuProcesses = metrics.cpuProcesses
+        gpuSnapshot = metrics.gpuSnapshot
+        gpuProcesses = metrics.gpuProcesses
+        networkProcesses = metrics.networkProcesses
+        diskProcesses = metrics.diskProcesses
+        tempSnapshot = metrics.tempSnapshot
+        fanSnapshot = metrics.fanSnapshot
+        memorySnapshot = metrics.memorySnapshot
+        memoryProcesses = metrics.memoryProcesses
+        lastError = metrics.lastError
+        networkDownHistory = metrics.networkDownHistory
+        networkUpHistory = metrics.networkUpHistory
+        diskReadHistory = metrics.diskReadHistory
+        diskWriteHistory = metrics.diskWriteHistory
+        cpuHistory = metrics.cpuHistory
+        gpuHistory = metrics.gpuHistory
+        cpuTempHistory = metrics.cpuTempHistory
+        gpuTempHistory = metrics.gpuTempHistory
+        memoryUsedHistory = metrics.memoryUsedHistory
     }
 
     private func startMonitoring() {
@@ -356,11 +432,17 @@ final class AppState: ObservableObject {
         AppLogger.info("Purging inactive memory (aggressive: \(aggressive))...", category: AppLogger.monitor)
         let success = await memoryMonitor.purge(aggressive: aggressive)
         if success {
-            // Refresh stats immediately
-            memorySnapshot = await memoryMonitor.sample()
-            AppLogger.info("Memory purged. Free: \(ByteFormatter.formatBytes(memorySnapshot.free))", category: AppLogger.monitor)
+            let snapshot = await memoryMonitor.sample()
+            cachedPopoverMetrics.memorySnapshot = snapshot
+            if isPopoverShown {
+                memorySnapshot = snapshot
+            }
+            AppLogger.info("Memory purged. Free: \(ByteFormatter.formatBytes(snapshot.free))", category: AppLogger.monitor)
         } else {
-            lastError = "Failed to free memory"
+            cachedPopoverMetrics.lastError = "Failed to free memory"
+            if isPopoverShown {
+                lastError = cachedPopoverMetrics.lastError
+            }
             AppLogger.error("Failed to purge memory", category: AppLogger.monitor)
         }
     }

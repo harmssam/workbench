@@ -10,6 +10,8 @@ struct PopoverView: View {
     @ObservedObject var appState: AppState
     @State private var draggingCard: MetricCardKind?
     @State private var isQuitHovered = false
+    @State private var isSettingsHovered = false
+    @State private var showSettings = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -22,6 +24,9 @@ struct PopoverView: View {
         .frame(width: PopoverLayout.width)
         .fixedSize(horizontal: false, vertical: true)
         .background(Color(nsColor: .windowBackgroundColor))
+        .sheet(isPresented: $showSettings) {
+            SettingsView(appState: appState)
+        }
     }
 
     private var updateStatusLabel: String {
@@ -79,15 +84,7 @@ struct PopoverView: View {
                     }
                 }
 
-                // Auto-update option (disabled by default) at the very top right
-                Toggle(isOn: $appState.autoUpdateEnabled) {
-                    Image(systemName: "arrow.triangle.2.circlepath")
-                        .imageScale(.small)
-                }
-                .toggleStyle(.button)
-                .labelsHidden()
-                .controlSize(.small)
-                .help(appState.autoUpdateEnabled ? "Auto-update enabled" : "Auto-update disabled (disabled by default)")
+                quitButton
             }
             Text(appState.headerSubtitle)
                 .font(.caption)
@@ -423,6 +420,8 @@ struct PopoverView: View {
 
     private var footer: some View {
         HStack {
+            settingsButton
+
             if let error = appState.lastError {
                 Text(error)
                     .font(.caption2)
@@ -433,33 +432,11 @@ struct PopoverView: View {
             Spacer()
 
             Button("Logs") {
-                if let url = try? FileManager.default.url(for: .libraryDirectory, in: .userDomainMask, appropriateFor: nil, create: false) {
-                    let logURL = url.appendingPathComponent("Logs/Pulse/pulse.log")
-                    NSWorkspace.shared.selectFile(logURL.path, inFileViewerRootedAtPath: "")
-                }
+                NSWorkspace.shared.selectFile(AppLogger.logFileURL.path, inFileViewerRootedAtPath: "")
             }
             .buttonStyle(.borderless)
             .font(.caption2)
             .help("Open Pulse log file")
-
-            Button {
-                NSApplication.shared.terminate(nil)
-            } label: {
-                Image(systemName: "power")
-                    .imageScale(.small)
-                    .foregroundStyle(isQuitHovered ? Color.red : Color.secondary)
-                    .padding(4)
-                    .background(
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(isQuitHovered ? Color.red.opacity(0.14) : Color.clear)
-                    )
-            }
-            .buttonStyle(.borderless)
-            .font(.caption2)
-            .keyboardShortcut("q", modifiers: .command)
-            .focusable(false)
-            .onHover { isQuitHovered = $0 }
-            .help("Quit Pulse (⌘Q)")
 
             Button {
                 appState.checkForUpdatesIfStale(force: true)
@@ -474,6 +451,45 @@ struct PopoverView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
+    }
+
+    private var settingsButton: some View {
+        Button {
+            showSettings = true
+        } label: {
+            Image(systemName: "gearshape")
+                .imageScale(.small)
+                .foregroundStyle(isSettingsHovered ? Color.primary : Color.secondary)
+                .padding(4)
+                .background(
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(isSettingsHovered ? Color.primary.opacity(0.1) : Color.clear)
+                )
+        }
+        .buttonStyle(.plain)
+        .focusable(false)
+        .onHover { isSettingsHovered = $0 }
+        .help("Settings")
+    }
+
+    private var quitButton: some View {
+        Button {
+            NSApplication.shared.terminate(nil)
+        } label: {
+            Image(systemName: "power")
+                .imageScale(.small)
+                .foregroundStyle(isQuitHovered ? Color.red : Color.secondary)
+                .padding(4)
+                .background(
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(isQuitHovered ? Color.red.opacity(0.14) : Color.clear)
+                )
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut("q", modifiers: .command)
+        .focusable(false)
+        .onHover { isQuitHovered = $0 }
+        .help("Quit Pulse (⌘Q)")
     }
 }
 

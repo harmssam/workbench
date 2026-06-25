@@ -51,11 +51,11 @@ actor MemoryMonitor {
 
         if purgeExists {
             do {
-                AppLogger.info("Running standard purge...", category: AppLogger.monitor)
+                AppLogger.debug("Running standard purge...", category: AppLogger.monitor)
                 _ = try await ProcessRunner.run(executable: purgePath, arguments: [])
-                AppLogger.info("Standard purge succeeded.", category: AppLogger.monitor)
+                AppLogger.debug("Standard purge succeeded.", category: AppLogger.monitor)
             } catch ProcessRunner.RunnerError.nonZeroExit(let code) {
-                AppLogger.info("purge exited with status \(code) (often harmless)", category: AppLogger.monitor)
+                AppLogger.debug("purge exited with status \(code) (often harmless)", category: AppLogger.monitor)
             } catch {
                 AppLogger.error("Standard purge failed: \(error)", category: AppLogger.monitor)
                 if !aggressive {
@@ -63,10 +63,10 @@ actor MemoryMonitor {
                 }
             }
         } else {
-            AppLogger.info("No /usr/bin/purge available on this system.", category: AppLogger.monitor)
+            AppLogger.debug("No /usr/bin/purge available on this system.", category: AppLogger.monitor)
             if !aggressive {
                 // For standard mode without purge, do a light pressure to at least attempt some release
-                AppLogger.info("Falling back to light memory_pressure for standard purge...", category: AppLogger.monitor)
+                AppLogger.debug("Falling back to light memory_pressure for standard purge...", category: AppLogger.monitor)
                 do {
                     let pressure = Process()
                     pressure.executableURL = URL(fileURLWithPath: "/usr/bin/memory_pressure")
@@ -74,7 +74,7 @@ actor MemoryMonitor {
                     try pressure.run()
                     try await Task.sleep(for: .seconds(3))
                     if pressure.isRunning { pressure.terminate() }
-                    AppLogger.info("Light pressure fallback completed.", category: AppLogger.monitor)
+                    AppLogger.debug("Light pressure fallback completed.", category: AppLogger.monitor)
                     return true
                 } catch {
                     AppLogger.error("Light fallback failed: \(error)", category: AppLogger.monitor)
@@ -84,7 +84,7 @@ actor MemoryMonitor {
         }
 
         if aggressive {
-            AppLogger.info("Performing aggressive memory release via memory_pressure...", category: AppLogger.monitor)
+            AppLogger.debug("Performing aggressive memory release via memory_pressure...", category: AppLogger.monitor)
             do {
                 let pressure = Process()
                 pressure.executableURL = URL(fileURLWithPath: "/usr/bin/memory_pressure")
@@ -101,7 +101,7 @@ actor MemoryMonitor {
                     _ = try? await ProcessRunner.run(executable: purgePath, arguments: [])
                 }
 
-                AppLogger.info("Aggressive purge completed.", category: AppLogger.monitor)
+                AppLogger.debug("Aggressive purge completed.", category: AppLogger.monitor)
             } catch {
                 AppLogger.error("Aggressive memory_pressure step failed (non-fatal): \(error)", category: AppLogger.monitor)
             }

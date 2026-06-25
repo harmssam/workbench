@@ -72,6 +72,7 @@ enum ProcessRunner {
             let state = FinishState(outputHandle: outputHandle, continuation: continuation)
 
             process.terminationHandler = { proc in
+                proc.terminationHandler = nil
                 state.finish(terminationStatus: proc.terminationStatus)
             }
 

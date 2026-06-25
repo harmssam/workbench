@@ -8,7 +8,9 @@ actor DiskMonitor {
     private var previousBytes: (read: UInt64, write: UInt64)?
     private var previousTimestamp: Date?
     private var previousProcessStats: [Int32: (read: UInt64, write: UInt64)] = [:]
+    private var cachedProcesses: [ProcessActivity] = []
     private var lastProcessSampleTime: Date?
+    private let processSampleInterval: TimeInterval = 3
 
     func sampleRates() async -> (read: UInt64, write: UInt64) {
         let current = await readCumulativeBytes()
@@ -36,14 +38,19 @@ actor DiskMonitor {
     }
 
     func sampleProcesses(limit: Int = 5) async -> [ProcessActivity] {
+        let now = Date()
+        if let lastSample = lastProcessSampleTime,
+           now.timeIntervalSince(lastSample) < processSampleInterval {
+            return cachedProcesses
+        }
+
         guard let output = try? await ProcessRunner.run(
             executable: "/bin/ps",
             arguments: ["-Aceo", "pid,comm"]
         ) else {
-            return []
+            return cachedProcesses
         }
 
-        let now = Date()
         let elapsed = lastProcessSampleTime.map { max(now.timeIntervalSince($0), 0.001) } ?? 1.0
         defer { lastProcessSampleTime = now }
 
@@ -76,10 +83,11 @@ actor DiskMonitor {
             }
         }
 
-        return activities
+        cachedProcesses = activities
             .sorted { $0.totalRate > $1.totalRate }
             .prefix(limit)
             .map { $0 }
+        return cachedProcesses
     }
 
     private func readCumulativeBytes() async -> (read: UInt64, write: UInt64) {

@@ -43,7 +43,7 @@ actor TempMonitor {
         let gpuC = gpu.flatMap { (20.0...130.0).contains($0) ? $0 : nil }
 
         if cpuC == nil && gpuC == nil {
-            AppLogger.info("No valid temperature readings from SMC", category: AppLogger.monitor)
+            AppLogger.debug("No valid temperature readings from SMC", category: AppLogger.monitor)
             return .unavailable
         }
         return TempSnapshot(cpuTemperature: cpuC, gpuTemperature: gpuC)

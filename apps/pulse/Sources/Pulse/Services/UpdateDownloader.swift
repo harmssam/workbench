@@ -42,9 +42,9 @@ enum UpdateDownloader {
 
         let expectedSize = httpResponse.value(forHTTPHeaderField: "Content-Length").flatMap(Int64.init)
         if let expectedSize {
-            AppLogger.info("Download size: \(expectedSize) bytes", category: AppLogger.update)
+            AppLogger.debug("Download size: \(expectedSize) bytes", category: AppLogger.update)
         } else {
-            AppLogger.info("Download size unknown (no Content-Length)", category: AppLogger.update)
+            AppLogger.debug("Download size unknown (no Content-Length)", category: AppLogger.update)
         }
 
         if FileManager.default.fileExists(atPath: destination.path) {
@@ -84,7 +84,7 @@ enum UpdateDownloader {
 
         try validateZip(at: destination)
         await onProgress(1.0)
-        AppLogger.info("Download complete: \(received) bytes written to \(destination.path)", category: AppLogger.update)
+        AppLogger.debug("Download complete: \(received) bytes written to \(destination.path)", category: AppLogger.update)
     }
 
     static func validateZip(at url: URL) throws {

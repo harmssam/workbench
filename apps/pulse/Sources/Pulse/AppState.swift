@@ -55,7 +55,7 @@ final class AppState: ObservableObject {
            !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return v.trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        return "0.2.11"
+        return "0.2.12"
     }
     @Published var availableUpdate: AppUpdate?
     @Published var isDownloadingUpdate = false
@@ -80,6 +80,21 @@ final class AppState: ObservableObject {
     @Published var aggressivePurge: Bool = UserDefaults.standard.bool(forKey: "aggressivePurge") {
         didSet {
             UserDefaults.standard.set(aggressivePurge, forKey: "aggressivePurge")
+        }
+    }
+
+    @Published var logLevel: LogLevel = LogLevel.loadSaved() {
+        didSet {
+            AppLogger.minimumLevel = logLevel
+        }
+    }
+
+    @Published var launchAtLogin: Bool = LaunchAtLogin.isEnabled {
+        didSet {
+            guard launchAtLogin != LaunchAtLogin.isEnabled else { return }
+            if !LaunchAtLogin.setEnabled(launchAtLogin) {
+                launchAtLogin = LaunchAtLogin.isEnabled
+            }
         }
     }
 
@@ -190,18 +205,26 @@ final class AppState: ObservableObject {
         downloadRate = rates.bytesIn
         uploadRate = rates.bytesOut
 
-        CrashReporter.breadcrumb("AppState.refresh: awaiting process samples")
+        CrashReporter.breadcrumb("AppState.refresh: awaiting network processes")
         let netProcs = await sampledNetworkProcesses
+        CrashReporter.breadcrumb("AppState.refresh: awaiting disk processes")
         let diskProcs = await sampledDiskProcesses
+        CrashReporter.breadcrumb("AppState.refresh: awaiting cpu processes")
         let cpuProcs = await sampledCPUProcesses
+        CrashReporter.breadcrumb("AppState.refresh: awaiting gpu processes")
         let gpuProcs = await sampledGPUProcesses
+        CrashReporter.breadcrumb("AppState.refresh: awaiting memory snapshot")
         let memSnap = await sampledMemorySnapshot
+        CrashReporter.breadcrumb("AppState.refresh: awaiting memory processes")
         let memProcs = await sampledMemoryProcesses
 
-        CrashReporter.breadcrumb("AppState.refresh: awaiting hardware samples")
+        CrashReporter.breadcrumb("AppState.refresh: awaiting cpu usage")
         let cpu = await sampledCPUUsage
+        CrashReporter.breadcrumb("AppState.refresh: awaiting gpu snapshot")
         let gpu = await sampledGPUSnapshot
+        CrashReporter.breadcrumb("AppState.refresh: awaiting temperature")
         let temp = await sampledTempSnapshot
+        CrashReporter.breadcrumb("AppState.refresh: awaiting fans")
         let fans = await sampledFanSnapshot
 
         CrashReporter.breadcrumb("AppState.refresh: applying state")
@@ -315,7 +338,7 @@ final class AppState: ObservableObject {
 
     func checkForUpdates() {
         lastUpdateCheck = Date()
-        AppLogger.info("Checking for updates...", category: AppLogger.update)
+        AppLogger.debug("Checking for updates...", category: AppLogger.update)
         Task {
             if let update = await updateManager.checkForUpdate() {
                 AppLogger.info("New version found: \(update.version)", category: AppLogger.update)
@@ -325,11 +348,11 @@ final class AppState: ObservableObject {
                         AppLogger.info("Auto-update is enabled — starting update automatically", category: AppLogger.update)
                         self.startUpdate()
                     } else {
-                        AppLogger.info("Auto-update is disabled — showing manual update button", category: AppLogger.update)
+                        AppLogger.debug("Auto-update is disabled — showing manual update button", category: AppLogger.update)
                     }
                 }
             } else {
-                AppLogger.info("No update available", category: AppLogger.update)
+                AppLogger.debug("No update available", category: AppLogger.update)
                 await MainActor.run {
                     self.availableUpdate = nil
                 }
@@ -350,12 +373,12 @@ final class AppState: ObservableObject {
         updateTask = Task {
             do {
                 let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("PulseUpdate-\(UUID().uuidString)")
-                AppLogger.info("Using temp dir: \(tempDir.path)", category: AppLogger.update)
+                AppLogger.debug("Using temp dir: \(tempDir.path)", category: AppLogger.update)
                 try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
 
                 let zipURL = tempDir.appendingPathComponent("Pulse.zip")
 
-                AppLogger.info("Downloading from \(update.downloadURL)", category: AppLogger.update)
+                AppLogger.debug("Downloading from \(update.downloadURL)", category: AppLogger.update)
                 try await UpdateDownloader.download(from: update.downloadURL, to: zipURL) { progress in
                     await MainActor.run {
                         if let progress {
@@ -370,7 +393,7 @@ final class AppState: ObservableObject {
                 }
 
                 let newAppURL = try await UpdateExtractor.extract(zipURL: zipURL, to: tempDir)
-                AppLogger.info("Update package ready at \(newAppURL.path)", category: AppLogger.update)
+                AppLogger.debug("Update package ready at \(newAppURL.path)", category: AppLogger.update)
 
                 await MainActor.run {
                     self.updateStatus = "Installing..."
@@ -379,7 +402,7 @@ final class AppState: ObservableObject {
                     self.performUpdateInstall(newAppURL: newAppURL)
                 }
             } catch is CancellationError {
-                AppLogger.info("Update cancelled", category: AppLogger.update)
+                AppLogger.debug("Update cancelled", category: AppLogger.update)
                 await MainActor.run {
                     self.isDownloadingUpdate = false
                     self.updateStatus = nil
@@ -403,7 +426,7 @@ final class AppState: ObservableObject {
 
     private func performUpdateInstall(newAppURL: URL) {
         let currentAppURL = Bundle.main.bundleURL
-        AppLogger.info("Preparing to replace app at \(currentAppURL.path) with \(newAppURL.path)", category: AppLogger.update)
+        AppLogger.debug("Preparing to replace app at \(currentAppURL.path) with \(newAppURL.path)", category: AppLogger.update)
 
         // Safer approach: launch the new app first, then quit and let a background process clean up
         // This reduces the chance of the running bundle being deleted while still executing code.
@@ -416,7 +439,7 @@ final class AppState: ObservableObject {
         ) &
         """
 
-        AppLogger.info("Spawning cleanup script...", category: AppLogger.update)
+        AppLogger.debug("Spawning cleanup script...", category: AppLogger.update)
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/bin/bash")
         task.arguments = ["-c", script]
@@ -429,7 +452,7 @@ final class AppState: ObservableObject {
 
     func purgeMemory() async {
         let aggressive = aggressivePurge
-        AppLogger.info("Purging inactive memory (aggressive: \(aggressive))...", category: AppLogger.monitor)
+        AppLogger.debug("Purging inactive memory (aggressive: \(aggressive))...", category: AppLogger.monitor)
         let success = await memoryMonitor.purge(aggressive: aggressive)
         if success {
             let snapshot = await memoryMonitor.sample()

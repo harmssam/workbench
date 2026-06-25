@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import os
 
 enum CrashReporter {
     private static let crashLogPath: String = {
@@ -15,11 +16,20 @@ enum CrashReporter {
         return logsDir.appendingPathComponent(".last-session").path
     }()
 
+    private static let breadcrumbLock = OSAllocatedUnfairLock(initialState: "startup")
+
+    /// Fixed buffer copied on each breadcrumb for async-signal-safe reads in the handler.
+    private static let crashBreadcrumbCapacity = 512
+    nonisolated(unsafe) private static var crashBreadcrumb = [UInt8](repeating: 0, count: crashBreadcrumbCapacity)
+
     nonisolated(unsafe) private static var installed = false
-    nonisolated(unsafe) private static var lastBreadcrumb = "startup"
 
     static func breadcrumb(_ message: String) {
-        lastBreadcrumb = message
+        breadcrumbLock.withLock { state in
+            state = message
+        }
+        updateCrashBreadcrumbBuffer(message)
+        appendBreadcrumbToLog(message)
     }
 
     static func install() {
@@ -40,6 +50,24 @@ enum CrashReporter {
 
     static func markCleanShutdown() {
         try? FileManager.default.removeItem(atPath: sessionMarkerPath)
+    }
+
+    private static func updateCrashBreadcrumbBuffer(_ message: String) {
+        let utf8 = Array(message.utf8.prefix(crashBreadcrumbCapacity - 1))
+        crashBreadcrumb.withUnsafeMutableBufferPointer { buffer in
+            guard let base = buffer.baseAddress else { return }
+            for i in 0..<buffer.count {
+                base[i] = 0
+            }
+            for (i, byte) in utf8.enumerated() {
+                base[i] = byte
+            }
+        }
+    }
+
+    private static func appendBreadcrumbToLog(_ message: String) {
+        guard AppLogger.isDebugEnabled else { return }
+        AppLogger.debug("BC: \(message)")
     }
 
     private static func logAbnormalPreviousSessionIfNeeded() {
@@ -74,12 +102,21 @@ enum CrashReporter {
 
     private static let signalHandler: @convention(c) (Int32) -> Void = { sig in
         let name = signalName(sig)
-        let context = CrashReporter.lastBreadcrumb
+        let context = CrashReporter.signalSafeBreadcrumb()
         CrashReporter.signalSafeWrite(
             "FATAL: Signal \(name) (\(sig)) received\nLast breadcrumb: \(context)\n"
         )
         signal(sig, SIG_DFL)
         raise(sig)
+    }
+
+    private static func signalSafeBreadcrumb() -> String {
+        crashBreadcrumb.withUnsafeBufferPointer { buffer in
+            guard let base = buffer.baseAddress else { return "unknown" }
+            let length = strnlen(base, buffer.count)
+            let bytes = UnsafeRawBufferPointer(start: base, count: length)
+            return String(decoding: bytes, as: UTF8.self)
+        }
     }
 
     private static func signalName(_ sig: Int32) -> String {

@@ -11,7 +11,7 @@ actor FanMonitor {
         }
 
         let fanCount = Int(await SMCService.shared.readUInt8(key: "FNum") ?? 0)
-        AppLogger.info("SMC reported \(fanCount) fans", category: AppLogger.monitor)
+        AppLogger.debug("SMC reported \(fanCount) fans", category: AppLogger.monitor)
         CrashReporter.breadcrumb("FanMonitor: FNum=\(fanCount)")
 
         var fans: [Fan] = []
@@ -33,7 +33,7 @@ actor FanMonitor {
         }
 
         if fans.isEmpty {
-            AppLogger.info("No fan RPM readings from SMC", category: AppLogger.monitor)
+            AppLogger.debug("No fan RPM readings from SMC", category: AppLogger.monitor)
         }
         return FanSnapshot(fans: fans)
     }

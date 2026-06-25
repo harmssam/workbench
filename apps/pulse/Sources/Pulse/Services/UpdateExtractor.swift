@@ -18,7 +18,7 @@ enum UpdateExtractor {
     private static let extractTimeout: TimeInterval = 120
 
     static func extract(zipURL: URL, to directory: URL) async throws -> URL {
-        AppLogger.info("Extracting \(zipURL.path) to \(directory.path)", category: AppLogger.update)
+        AppLogger.debug("Extracting \(zipURL.path) to \(directory.path)", category: AppLogger.update)
 
         // ditto handles archives created by ditto -c -k in CI; more reliable than unzip here.
         _ = try await ProcessRunner.run(
@@ -28,7 +28,7 @@ enum UpdateExtractor {
         )
 
         if let appURL = findAppBundle(named: "Pulse.app", in: directory) {
-            AppLogger.info("Found extracted app at \(appURL.path)", category: AppLogger.update)
+            AppLogger.debug("Found extracted app at \(appURL.path)", category: AppLogger.update)
             return appURL
         }
 

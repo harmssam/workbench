@@ -17,7 +17,7 @@ actor UpdateManager {
     }
 
     func checkForUpdate() async -> AppUpdate? {
-        AppLogger.info("Querying GitHub for latest release...", category: AppLogger.update)
+        AppLogger.debug("Querying GitHub for latest release...", category: AppLogger.update)
         let url = URL(string: "https://api.github.com/repos/\(repoOwner)/\(repoName)/releases/latest")!
         var request = URLRequest(url: url)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
@@ -39,10 +39,10 @@ actor UpdateManager {
             let release = try decoder.decode(GitHubRelease.self, from: data)
 
             let version = release.tag_name.replacingOccurrences(of: "pulse-v", with: "")
-            AppLogger.info("Latest tag: \(release.tag_name) (parsed \(version))", category: AppLogger.update)
+            AppLogger.debug("Latest tag: \(release.tag_name) (parsed \(version))", category: AppLogger.update)
             
             guard VersionComparator.isNewer(version, than: currentVersion) else {
-                AppLogger.info("Current version \(currentVersion) is up to date", category: AppLogger.update)
+                AppLogger.debug("Current version \(currentVersion) is up to date", category: AppLogger.update)
                 return nil
             }
 
@@ -54,7 +54,7 @@ actor UpdateManager {
                 return nil
             }
 
-            AppLogger.info("Found update asset: \(asset.name)", category: AppLogger.update)
+            AppLogger.debug("Found update asset: \(asset.name)", category: AppLogger.update)
             return AppUpdate(
                 version: version,
                 downloadURL: asset.browser_download_url,

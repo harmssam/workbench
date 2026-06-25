@@ -11,23 +11,18 @@ extension View {
     @ViewBuilder
     func pulsePopoverChrome() -> some View {
         if #available(macOS 26.0, *) {
-            self.background {
-                RoundedRectangle(cornerRadius: PulseGlassMetrics.popoverCornerRadius, style: .continuous)
-                    .fill(.clear)
-                    .glassEffect(.regular, in: .rect(cornerRadius: PulseGlassMetrics.popoverCornerRadius))
-            }
+            modifier(PulsePopoverChromeModifier())
         } else {
-            self.background(Color(nsColor: .windowBackgroundColor))
+            background(Color(nsColor: .windowBackgroundColor))
         }
     }
 
     @ViewBuilder
     func pulseCardGlass() -> some View {
         if #available(macOS 26.0, *) {
-            self.glassEffect(.regular, in: .rect(cornerRadius: PulseGlassMetrics.cardCornerRadius))
+            modifier(PulseCardGlassModifier())
         } else {
-            self
-                .background(Color(nsColor: .controlBackgroundColor).opacity(0.55))
+            background(Color(nsColor: .controlBackgroundColor).opacity(0.55))
                 .overlay(
                     RoundedRectangle(cornerRadius: PulseGlassMetrics.cardCornerRadius, style: .continuous)
                         .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
@@ -39,10 +34,9 @@ extension View {
     @ViewBuilder
     func pulseInsetSurface(cornerRadius: CGFloat = PulseGlassMetrics.surfaceCornerRadius) -> some View {
         if #available(macOS 26.0, *) {
-            self.glassEffect(.clear, in: .rect(cornerRadius: cornerRadius))
+            modifier(PulseInsetSurfaceModifier(cornerRadius: cornerRadius))
         } else {
-            self
-                .background(Color.primary.opacity(0.055))
+            background(Color.primary.opacity(0.055))
                 .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         }
     }
@@ -50,16 +44,52 @@ extension View {
     @ViewBuilder
     func pulseGrabberSurface(isActive: Bool) -> some View {
         if #available(macOS 26.0, *) {
-            self.glassEffect(
-                isActive ? .regular.interactive() : .clear,
-                in: .rect(cornerRadius: PulseGlassMetrics.surfaceCornerRadius)
-            )
+            modifier(PulseGrabberSurfaceModifier(isActive: isActive))
         } else {
-            self.background(
+            background(
                 RoundedRectangle(cornerRadius: PulseGlassMetrics.surfaceCornerRadius, style: .continuous)
                     .fill(isActive ? Color.primary.opacity(0.1) : Color.primary.opacity(0.05))
             )
         }
+    }
+}
+
+@available(macOS 26.0, *)
+private struct PulsePopoverChromeModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content.background {
+            RoundedRectangle(cornerRadius: PulseGlassMetrics.popoverCornerRadius, style: .continuous)
+                .fill(.clear)
+                .glassEffect(.regular, in: .rect(cornerRadius: PulseGlassMetrics.popoverCornerRadius))
+        }
+    }
+}
+
+@available(macOS 26.0, *)
+private struct PulseCardGlassModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content.glassEffect(.regular, in: .rect(cornerRadius: PulseGlassMetrics.cardCornerRadius))
+    }
+}
+
+@available(macOS 26.0, *)
+private struct PulseInsetSurfaceModifier: ViewModifier {
+    let cornerRadius: CGFloat
+
+    func body(content: Content) -> some View {
+        content.glassEffect(.clear, in: .rect(cornerRadius: cornerRadius))
+    }
+}
+
+@available(macOS 26.0, *)
+private struct PulseGrabberSurfaceModifier: ViewModifier {
+    let isActive: Bool
+
+    func body(content: Content) -> some View {
+        content.glassEffect(
+            isActive ? .regular.interactive() : .clear,
+            in: .rect(cornerRadius: PulseGlassMetrics.surfaceCornerRadius)
+        )
     }
 }
 

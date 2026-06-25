@@ -31,4 +31,12 @@ struct InstallLocationCheckerTests {
         let binaryURL = URL(fileURLWithPath: "/Users/sam/.build/debug/Pulse")
         #expect(!InstallLocationChecker.shouldRecommendApplicationsInstall(bundleURL: binaryURL))
     }
+
+    @Test("Skips recommendation during auto-update staging")
+    func skipsUpdateStagingBundles() {
+        let stagingURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PulseUpdate-ABC123/Pulse.app")
+        #expect(!InstallLocationChecker.shouldRecommendApplicationsInstall(bundleURL: stagingURL))
+        #expect(InstallLocationChecker.isUpdateStagingBundle(stagingURL))
+    }
 }

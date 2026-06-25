@@ -55,7 +55,7 @@ final class AppState: ObservableObject {
            !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return v.trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        return "0.2.10"
+        return "0.2.11"
     }
     @Published var availableUpdate: AppUpdate?
     @Published var isDownloadingUpdate = false
@@ -409,7 +409,7 @@ final class AppState: ObservableObject {
         // This reduces the chance of the running bundle being deleted while still executing code.
         let script = """
         (sleep 1; \
-        open -a "\(newAppURL.path)"; \
+        open -na "\(newAppURL.path)" --args \(InstallLocationChecker.updatingLaunchArgument); \
         sleep 2; \
         rm -rf "\(currentAppURL.path)"; \
         mv "\(newAppURL.path)" "\(currentAppURL.path)"

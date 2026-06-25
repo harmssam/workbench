@@ -9,7 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         CrashReporter.install()
 
-        let ver = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.2.4"
+        let ver = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.2.11"
         AppLogger.info("Pulse launched (version \(ver))", category: AppLogger.general)
         terminateDuplicateInstances()
         NSApp.setActivationPolicy(.accessory)

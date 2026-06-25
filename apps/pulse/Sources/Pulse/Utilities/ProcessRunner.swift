@@ -10,6 +10,7 @@ enum ProcessRunner {
     private final class FinishState: @unchecked Sendable {
         private let lock = NSLock()
         private var didFinish = false
+        private var timedOut = false
         private let outputHandle: FileHandle
         private let continuation: CheckedContinuation<String, Error>
 
@@ -18,18 +19,38 @@ enum ProcessRunner {
             self.continuation = continuation
         }
 
-        func complete(with result: Result<String, Error>) {
+        func markTimedOut() {
+            lock.lock()
+            timedOut = true
+            lock.unlock()
+        }
+
+        func finish(terminationStatus: Int32) {
+            lock.lock()
+            defer { lock.unlock() }
+            guard !didFinish else { return }
+            didFinish = true
+
+            // readToEnd() can fail if the child exits before we read; never crash the app.
+            let output = (try? outputHandle.readToEnd()).flatMap { String(data: $0, encoding: .utf8) } ?? ""
+            outputHandle.closeFile()
+
+            if timedOut {
+                continuation.resume(throwing: RunnerError.timedOut)
+            } else if terminationStatus == 0 {
+                continuation.resume(returning: output)
+            } else {
+                continuation.resume(throwing: RunnerError.nonZeroExit(terminationStatus))
+            }
+        }
+
+        func fail(_ error: Error) {
             lock.lock()
             defer { lock.unlock() }
             guard !didFinish else { return }
             didFinish = true
             outputHandle.closeFile()
-            switch result {
-            case .success(let output):
-                continuation.resume(returning: output)
-            case .failure(let error):
-                continuation.resume(throwing: error)
-            }
+            continuation.resume(throwing: error)
         }
     }
 
@@ -51,26 +72,20 @@ enum ProcessRunner {
             let state = FinishState(outputHandle: outputHandle, continuation: continuation)
 
             process.terminationHandler = { proc in
-                let data = outputHandle.readDataToEndOfFile()
-                let output = String(data: data, encoding: .utf8) ?? ""
-                if proc.terminationStatus == 0 {
-                    state.complete(with: .success(output))
-                } else {
-                    state.complete(with: .failure(RunnerError.nonZeroExit(proc.terminationStatus)))
-                }
+                state.finish(terminationStatus: proc.terminationStatus)
             }
 
             do {
                 try process.run()
             } catch {
-                state.complete(with: .failure(RunnerError.launchFailed))
+                state.fail(RunnerError.launchFailed)
                 return
             }
 
             DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout) {
                 guard process.isRunning else { return }
+                state.markTimedOut()
                 process.terminate()
-                state.complete(with: .failure(RunnerError.timedOut))
             }
         }
     }

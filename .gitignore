@@ -35,6 +35,7 @@ target/
 .build/
 apps/pulse/dist/
 apps/pulse/build/
+apps/harmless-budget/release/
 DerivedData/
 *.xcuserstate
 *.xcworkspace/xcuserdata/

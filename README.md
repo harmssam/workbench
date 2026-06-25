@@ -17,7 +17,7 @@ docs/       # Cross-cutting notes (optional)
 | App | Description | Version | Releases |
 |-----|-------------|---------|----------|
 | [Pulse](apps/pulse/) | Real-time network, disk, CPU, and GPU monitor for the menu bar | 0.1.2 | [Download](https://github.com/harmssam/workbench/releases) |
-| [Harmless Budget](apps/harmless-budget/) | Local-only desktop budgeting app — your data stays on your Mac | 0.1.0 | — |
+| [Harmless Budget](apps/harmless-budget/) | Local-only desktop budgeting app — your data stays on your Mac | 0.1.0 | [Download](https://github.com/harmssam/workbench/releases) |
 
 ### Pulse
 
@@ -35,13 +35,17 @@ New releases are built automatically when a `pulse-v*` tag is pushed.
 
 ### Harmless Budget
 
-Local-only budgeting with accounts, CSV import, rules, and monthly targets. See [apps/harmless-budget/README.md](apps/harmless-budget/README.md).
+Install from [GitHub Releases](https://github.com/harmssam/workbench/releases) or build from source — see [apps/harmless-budget/README.md](apps/harmless-budget/README.md).
 
 ```bash
-cd apps/harmless-budget
-pnpm install
-pnpm tauri dev
+# Install a release build
+# 1. Download Harmless-Budget-v0.1.0-macos-arm64.zip from Releases
+# 2. Unzip and copy to Applications:
+cp -r "Harmless Budget.app" /Applications/
+open "/Applications/Harmless Budget.app"
 ```
+
+New releases are built automatically when a `harmless-budget-v*` tag is pushed.
 
 ## Requirements
 

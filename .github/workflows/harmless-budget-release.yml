@@ -1,0 +1,86 @@
+name: Harmless Budget Release
+
+on:
+  push:
+    tags:
+      - "harmless-budget-v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Toolchain info
+        run: |
+          sw_vers
+          node --version
+          pnpm --version
+          rustc --version
+
+      - name: Install dependencies
+        working-directory: apps/harmless-budget
+        run: pnpm install --frozen-lockfile
+
+      - name: Test
+        working-directory: apps/harmless-budget
+        run: pnpm test
+
+      - name: Build app bundle
+        working-directory: apps/harmless-budget
+        run: pnpm tauri build
+
+      - name: Package zip
+        working-directory: apps/harmless-budget
+        run: |
+          VERSION="${GITHUB_REF_NAME#harmless-budget-v}"
+          if [[ "$VERSION" == "$GITHUB_REF_NAME" ]]; then
+            VERSION="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          mkdir -p release
+          ditto -c -k --sequesterRsrc --keepParent \
+            "src-tauri/target/release/bundle/macos/Harmless Budget.app" \
+            "release/Harmless-Budget-${VERSION}-macos-arm64.zip"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Harmless Budget ${{ env.VERSION }}
+          files: apps/harmless-budget/release/Harmless-Budget-${{ env.VERSION }}-macos-arm64.zip
+          generate_release_notes: true
+          body: |
+            ## Install
+
+            1. Download `Harmless-Budget-${{ env.VERSION }}-macos-arm64.zip`
+            2. Unzip and drag **Harmless Budget.app** to Applications
+            3. Open the app — if macOS blocks it, right-click → **Open** (first launch only)
+
+            ## Requirements
+
+            - macOS 14+
+            - Apple Silicon (arm64)
+
+            Your data is stored locally at `~/Library/Application Support/com.harmless.budget/data.db`.
+
+            Built from tag `${{ github.ref_name }}`.

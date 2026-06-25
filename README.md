@@ -17,7 +17,7 @@ docs/       # Cross-cutting notes (optional)
 | App | Description | Version | Releases |
 |-----|-------------|---------|----------|
 | [Pulse](apps/pulse/) | Real-time network, disk, CPU, and GPU monitor for the menu bar | 0.1.2 | [Download](https://github.com/harmssam/workbench/releases) |
-| [Harmless Budget](apps/harmless-budget/) | Local-only desktop budgeting app — your data stays on your Mac | 0.1.0 | [Download](https://github.com/harmssam/workbench/releases) |
+| [Harmless Budget](apps/harmless-budget/) | Local-only zero-based budgeting app — your data stays on your Mac | 0.1.0 | [Download](https://github.com/harmssam/workbench/releases) |
 
 ### Pulse
 
@@ -46,6 +46,19 @@ open "/Applications/Harmless Budget.app"
 ```
 
 New releases are built automatically when a `harmless-budget-v*` tag is pushed.
+
+## Scripts
+
+| Script | Description |
+|--------|-------------|
+| [heat-up.py](scripts/heat-up.py) | Stress CPU (all but one core) and GPU to raise system temperature for thermal testing |
+| [gpu-stress.swift](scripts/gpu-stress.swift) | Metal compute shader used by `heat-up.py` on macOS |
+
+```bash
+./scripts/heat-up.py   # runs for 5 minutes or until Ctrl+C
+```
+
+Requires Python 3 and, on macOS, Swift for GPU stress.
 
 ## Requirements
 

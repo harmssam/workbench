@@ -8,7 +8,7 @@ A local-only desktop budgeting app for macOS. Your transactions, categories, and
 
 ### Dashboard
 
-Month-at-a-glance summary with income, spending, and net cash flow. Sparklines and bar charts show recent trends; drill into any month to inspect underlying transactions.
+Month-at-a-glance summary with income, spending, and net cash flow. Internal account transfers are excluded from totals. Sparklines and bar charts show recent trends; drill into any month to inspect underlying transactions.
 
 ### Transactions
 
@@ -16,15 +16,15 @@ Browse and filter by account, category, month, and text search. Switch between l
 
 ### CSV import
 
-Multi-step import wizard: pick a file, map columns, preview rows, then commit. Built-in presets for common Canadian banks (RBC, TD, Scotiabank, and others). Supports single-amount and separate debit/credit columns, encoding detection, duplicate detection via import hashes, and saved import profiles for repeat uploads.
+Multi-step import wizard: pick a file, map columns, preview rows, then commit. Built-in presets for common Canadian banks (RBC, TD, Scotiabank, and others). Supports single-amount and separate debit/credit columns, encoding detection, duplicate detection via import hashes, and saved import profiles for repeat uploads. Detects inter-account transfers from payee and memo patterns during import.
 
 ### Budget
 
-Set monthly spending targets on leaf categories. Progress bars compare targets to actuals for the selected month. Parent categories roll up child totals automatically.
+Zero-based monthly budgeting: set income for the month, then allocate every dollar to leaf expense categories. Summary shows income, total budgeted, and left to budget — with one-click to use actual income from transactions. Categories are grouped under parents with per-group rollups and progress bars comparing budgeted amounts to spending.
 
 ### Analytics
 
-Category breakdown pie chart, spending trends over time, and top payees. Filter by month and account. Click through to underlying transactions.
+Category breakdown pie chart, spending trends over time, and top payees. Transfer transactions are excluded from spending totals. Filter by month and account. Click through to underlying transactions.
 
 ### Rules
 
@@ -112,13 +112,14 @@ This creates and pushes a `harmless-budget-v0.1.0` tag. GitHub Actions runs test
 
 ```
 Tauri 2 shell (Rust)
-├── SQLite (rusqlite)     → accounts, categories, transactions, rules, budget targets
-├── Import pipeline       → CSV parse, bank presets, column mapping, dedup hashes
+├── SQLite (rusqlite)     → accounts, categories, transactions, rules, budget targets, monthly income
+├── Spending filters      → shared SQL for income/expense totals (excludes transfers)
+├── Import pipeline       → CSV parse, bank presets, column mapping, transfer detection, dedup hashes
 └── React UI (Vite)
     ├── Dashboard         → month summary, trends, category breakdown
     ├── Transactions      → filter, bulk edit, rule application
     ├── Import            → wizard + saved profiles
-    ├── Budget            → monthly targets vs actuals
+    ├── Budget            → zero-based income allocation by category
     ├── Analytics         → charts and top payees
     ├── Rules             → keyword auto-categorization
     ├── Accounts          → account management

@@ -55,7 +55,7 @@ final class AppState: ObservableObject {
            !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return v.trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        return "0.2.13"
+        return "0.2.14"
     }
     @Published var availableUpdate: AppUpdate?
     @Published var isDownloadingUpdate = false
@@ -200,34 +200,26 @@ final class AppState: ObservableObject {
         async let sampledTempSnapshot = tempMonitor.sample()
         async let sampledFanSnapshot = fanMonitor.sample()
 
+        // Await every sample before touching @Published state. Publishing menu bar
+        // rates mid-refresh re-enters MainActor (Combine → status item) during long
+        // nettop awaits and has caused SIGTRAP (see v0.2.10).
+        CrashReporter.breadcrumb("AppState.refresh: awaiting samples")
         let rates = await networkRates
         let disk = await diskRates
-        downloadRate = rates.bytesIn
-        uploadRate = rates.bytesOut
-
-        CrashReporter.breadcrumb("AppState.refresh: awaiting network processes")
         let netProcs = await sampledNetworkProcesses
-        CrashReporter.breadcrumb("AppState.refresh: awaiting disk processes")
         let diskProcs = await sampledDiskProcesses
-        CrashReporter.breadcrumb("AppState.refresh: awaiting cpu processes")
         let cpuProcs = await sampledCPUProcesses
-        CrashReporter.breadcrumb("AppState.refresh: awaiting gpu processes")
         let gpuProcs = await sampledGPUProcesses
-        CrashReporter.breadcrumb("AppState.refresh: awaiting memory snapshot")
         let memSnap = await sampledMemorySnapshot
-        CrashReporter.breadcrumb("AppState.refresh: awaiting memory processes")
         let memProcs = await sampledMemoryProcesses
-
-        CrashReporter.breadcrumb("AppState.refresh: awaiting cpu usage")
         let cpu = await sampledCPUUsage
-        CrashReporter.breadcrumb("AppState.refresh: awaiting gpu snapshot")
         let gpu = await sampledGPUSnapshot
-        CrashReporter.breadcrumb("AppState.refresh: awaiting temperature")
         let temp = await sampledTempSnapshot
-        CrashReporter.breadcrumb("AppState.refresh: awaiting fans")
         let fans = await sampledFanSnapshot
 
         CrashReporter.breadcrumb("AppState.refresh: applying state")
+        downloadRate = rates.bytesIn
+        uploadRate = rates.bytesOut
         var metrics = cachedPopoverMetrics
         metrics.lastError = nil
         metrics.diskReadRate = disk.read
@@ -242,7 +234,11 @@ final class AppState: ObservableObject {
         metrics.gpuProcesses = gpuProcs
         metrics.memorySnapshot = memSnap
         metrics.memoryProcesses = memProcs
-        appendHistoryBuffers(using: metrics)
+        appendHistoryBuffers(
+            using: metrics,
+            downloadRate: rates.bytesIn,
+            uploadRate: rates.bytesOut
+        )
         metrics.networkDownHistory = downHistory.values
         metrics.networkUpHistory = upHistory.values
         metrics.diskReadHistory = diskReadHistoryBuffer.values
@@ -259,7 +255,11 @@ final class AppState: ObservableObject {
         CrashReporter.breadcrumb("AppState.refresh: complete")
     }
 
-    private func appendHistoryBuffers(using metrics: CachedPopoverMetrics) {
+    private func appendHistoryBuffers(
+        using metrics: CachedPopoverMetrics,
+        downloadRate: UInt64,
+        uploadRate: UInt64
+    ) {
         downHistory.append(ByteFormatter.megabitsPerSecond(from: downloadRate))
         upHistory.append(ByteFormatter.megabitsPerSecond(from: uploadRate))
         diskReadHistoryBuffer.append(Double(metrics.diskReadRate))

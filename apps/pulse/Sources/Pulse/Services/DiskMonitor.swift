@@ -10,10 +10,17 @@ actor DiskMonitor {
     private var previousProcessStats: [Int32: (read: UInt64, write: UInt64)] = [:]
     private var cachedProcesses: [ProcessActivity] = []
     private var lastProcessSampleTime: Date?
+    private var subprocessInFlight = false
     private var processSampleInFlight = false
     private let processSampleInterval: TimeInterval = 3
 
     func sampleRates() async -> (read: UInt64, write: UInt64) {
+        if subprocessInFlight {
+            return (0, 0)
+        }
+        subprocessInFlight = true
+        defer { subprocessInFlight = false }
+
         let current = await readCumulativeBytes()
         let now = Date()
 
@@ -44,13 +51,15 @@ actor DiskMonitor {
            now.timeIntervalSince(lastSample) < processSampleInterval {
             return cachedProcesses
         }
-        if processSampleInFlight {
+        if processSampleInFlight || subprocessInFlight {
             return cachedProcesses
         }
 
         processSampleInFlight = true
+        subprocessInFlight = true
         defer {
             processSampleInFlight = false
+            subprocessInFlight = false
             lastProcessSampleTime = Date()
         }
 

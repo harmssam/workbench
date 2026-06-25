@@ -2,6 +2,11 @@ import Darwin
 import Foundation
 
 actor MemoryMonitor {
+    private var cachedProcesses: [MemoryProcessActivity] = []
+    private var lastProcessSampleTime: Date?
+    private var processSampleInFlight = false
+    private let processSampleInterval: TimeInterval = 3
+
     func sample() -> MemorySnapshot {
         var total: UInt64 = 0
         var size = MemoryLayout<UInt64>.size
@@ -112,11 +117,26 @@ actor MemoryMonitor {
     }
 
     func sampleTopMemoryProcesses(limit: Int = 5) async -> [MemoryProcessActivity] {
+        let now = Date()
+        if let lastSample = lastProcessSampleTime,
+           now.timeIntervalSince(lastSample) < processSampleInterval {
+            return cachedProcesses
+        }
+        if processSampleInFlight {
+            return cachedProcesses
+        }
+
+        processSampleInFlight = true
+        defer {
+            processSampleInFlight = false
+            lastProcessSampleTime = Date()
+        }
+
         guard let output = try? await ProcessRunner.run(
             executable: "/bin/ps",
             arguments: ["-ax", "-o", "pid,rss,comm"]
         ) else {
-            return []
+            return cachedProcesses
         }
 
         var processes: [MemoryProcessActivity] = []
@@ -140,9 +160,10 @@ actor MemoryMonitor {
             }
         }
 
-        return processes
+        cachedProcesses = processes
             .sorted { $0.memoryBytes > $1.memoryBytes }
             .prefix(limit)
             .map { $0 }
+        return cachedProcesses
     }
 }

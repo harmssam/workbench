@@ -12,12 +12,20 @@ actor NetworkMonitor {
     private var previousProcessBytes: [String: (bytesIn: UInt64, bytesOut: UInt64, pid: Int32)] = [:]
     private var cachedProcesses: [NetworkProcessActivity] = []
     private var lastProcessSampleTime: Date?
+    private var subprocessInFlight = false
     private var processSampleInFlight = false
+    private var lastRates: (bytesIn: UInt64, bytesOut: UInt64) = (0, 0)
     private let processSampleInterval: TimeInterval = 3
     /// nettop -L 1 routinely takes ~5s on busy systems; keep margin above that.
     private let nettopTimeout: TimeInterval = 10
 
     func sampleRates() async -> (bytesIn: UInt64, bytesOut: UInt64) {
+        if subprocessInFlight {
+            return lastRates
+        }
+        subprocessInFlight = true
+        defer { subprocessInFlight = false }
+
         let current = await readInterfaceStats()
         let now = Date()
 
@@ -27,11 +35,12 @@ actor NetworkMonitor {
         }
 
         guard let previousTime = previousTimestamp else {
-            return (0, 0)
+            lastRates = (0, 0)
+            return lastRates
         }
 
         let elapsed = now.timeIntervalSince(previousTime)
-        guard elapsed > 0 else { return (0, 0) }
+        guard elapsed > 0 else { return lastRates }
 
         var totalIn: UInt64 = 0
         var totalOut: UInt64 = 0
@@ -45,7 +54,8 @@ actor NetworkMonitor {
             totalOut += UInt64(Double(deltaOut) / elapsed)
         }
 
-        return (totalIn, totalOut)
+        lastRates = (totalIn, totalOut)
+        return lastRates
     }
 
     func sampleProcesses(limit: Int = 5) async -> [NetworkProcessActivity] {
@@ -54,13 +64,15 @@ actor NetworkMonitor {
            now.timeIntervalSince(lastSample) < processSampleInterval {
             return cachedProcesses
         }
-        if processSampleInFlight {
+        if processSampleInFlight || subprocessInFlight {
             return cachedProcesses
         }
 
         processSampleInFlight = true
+        subprocessInFlight = true
         defer {
             processSampleInFlight = false
+            subprocessInFlight = false
             lastProcessSampleTime = Date()
         }
 

@@ -1,5 +1,8 @@
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
+
+use super::budget;
+use super::spending::{SPENDING_EXPENSE_FILTER, SPENDING_INCOME_FILTER};
 
 #[derive(Debug, Serialize)]
 pub struct DashboardSummary {
@@ -17,56 +20,46 @@ pub struct DashboardSummary {
 pub fn get_summary(conn: &Connection, month: &str) -> Result<DashboardSummary, String> {
     let month_prefix = format!("{month}%");
 
+    let income_sql = format!(
+        "SELECT COALESCE(SUM(t.amount_cents), 0)
+         FROM transactions t
+         LEFT JOIN categories c ON c.id = t.category_id
+         WHERE {SPENDING_INCOME_FILTER}
+           AND t.date LIKE ?1"
+    );
     let income_cents: i64 = conn
-        .query_row(
-            "SELECT COALESCE(SUM(t.amount_cents), 0)
-             FROM transactions t
-             LEFT JOIN categories c ON c.id = t.category_id
-             WHERE t.type = 'income'
-               AND t.date LIKE ?1
-               AND (c.id IS NULL OR c.type != 'transfer')",
-            params![month_prefix],
-            |row| row.get(0),
-        )
+        .query_row(&income_sql, params![month_prefix], |row| row.get(0))
         .map_err(|e| e.to_string())?;
 
+    let expense_sql = format!(
+        "SELECT COALESCE(SUM(t.amount_cents), 0)
+         FROM transactions t
+         LEFT JOIN categories c ON c.id = t.category_id
+         WHERE {SPENDING_EXPENSE_FILTER}
+           AND t.date LIKE ?1"
+    );
     let expense_cents: i64 = conn
-        .query_row(
-            "SELECT COALESCE(SUM(t.amount_cents), 0)
-             FROM transactions t
-             LEFT JOIN categories c ON c.id = t.category_id
-             WHERE t.type = 'expense'
-               AND t.date LIKE ?1
-               AND (c.id IS NULL OR c.type != 'transfer')",
-            params![month_prefix],
-            |row| row.get(0),
-        )
+        .query_row(&expense_sql, params![month_prefix], |row| row.get(0))
         .map_err(|e| e.to_string())?;
 
-    let budget_target_cents: i64 = conn
+    let allocated_cents = budget::get_allocated_cents(conn, month)?;
+    let budget_income_cents: i64 = conn
         .query_row(
-            "SELECT COALESCE(SUM(bt.target_cents), 0)
-             FROM budget_targets bt
-             JOIN categories c ON c.id = bt.category_id
-             WHERE bt.month = ?1 AND c.type = 'expense'",
+            "SELECT COALESCE(income_cents, 0) FROM budget_months WHERE month = ?1",
             params![month],
             |row| row.get(0),
         )
-        .map_err(|e| e.to_string())?;
+        .optional()
+        .map_err(|e| e.to_string())?
+        .unwrap_or(0);
 
-    let budget_actual_cents: i64 = conn
-        .query_row(
-            "SELECT COALESCE(SUM(t.amount_cents), 0)
-             FROM transactions t
-             JOIN categories c ON c.id = t.category_id
-             JOIN accounts a ON a.id = t.account_id
-             WHERE t.date LIKE ?1
-               AND c.type = 'expense'
-               AND a.include_in_budget = 1",
-            params![month_prefix],
-            |row| row.get(0),
-        )
-        .map_err(|e| e.to_string())?;
+    let budget_target_cents = if budget_income_cents > 0 {
+        budget_income_cents
+    } else {
+        allocated_cents
+    };
+
+    let budget_actual_cents = allocated_cents;
 
     let uncategorized_count: i64 = conn
         .query_row(

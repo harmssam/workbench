@@ -47,7 +47,7 @@ import {
 } from "../lib/utils";
 import { Button } from "../components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
-import { Input } from "../components/ui/Input";
+import { MonthPicker } from "../components/ui/MonthPicker";
 
 const TREND_MONTHS = 6;
 const TOP_CATEGORY_COUNT = 5;
@@ -137,15 +137,16 @@ export function Dashboard() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <PageHeader title="Dashboard" description={formatMonthLabel(month)}>
-        <div className="w-44">
-          <Input
-            type="month"
-            value={month}
-            onChange={(e) => setMonth(e.target.value)}
-            aria-label="Select month"
-          />
-        </div>
+      <PageHeader
+        title="Dashboard"
+        description="Month at a glance — income, spending, and budget"
+      >
+        <MonthPicker
+          value={month}
+          onChange={setMonth}
+          label="Month"
+          id="dashboard-month"
+        />
       </PageHeader>
 
       <div className="flex-1 overflow-y-auto p-8">
@@ -394,24 +395,26 @@ export function Dashboard() {
               </CardHeader>
               <CardContent className="grid gap-4 sm:grid-cols-3">
                 <div>
-                  <p className="text-xs text-zinc-500">Budget target</p>
+                  <p className="text-xs text-zinc-500">Income</p>
                   <p className="tabular-nums text-lg font-semibold text-zinc-200">
                     {formatCents(summary.budget_target_cents)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-zinc-500">Budget spent</p>
-                  <p className="tabular-nums text-lg font-semibold text-red-400">
-                    {formatCents(Math.abs(summary.budget_actual_cents))}
+                  <p className="text-xs text-zinc-500">Budgeted</p>
+                  <p className="tabular-nums text-lg font-semibold text-zinc-300">
+                    {formatCents(summary.budget_actual_cents)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-zinc-500">Remaining</p>
+                  <p className="text-xs text-zinc-500">Left to budget</p>
                   <p
                     className={`tabular-nums text-lg font-semibold ${
-                      summary.budget_remaining_cents >= 0
+                      summary.budget_remaining_cents === 0
                         ? "text-emerald-400"
-                        : "text-red-400"
+                        : summary.budget_remaining_cents > 0
+                          ? "text-amber-400"
+                          : "text-red-400"
                     }`}
                   >
                     {formatCents(summary.budget_remaining_cents)}

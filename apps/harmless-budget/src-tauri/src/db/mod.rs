@@ -7,6 +7,7 @@ pub mod dashboard;
 pub mod import_history;
 pub mod import_profiles;
 pub mod rules;
+pub mod spending;
 pub mod transactions;
 
 use chrono::Utc;
@@ -14,7 +15,7 @@ use rusqlite::{Connection, Result as SqliteResult};
 use std::fs;
 use std::path::PathBuf;
 
-const SCHEMA_VERSION: i32 = 3;
+const SCHEMA_VERSION: i32 = 5;
 
 pub fn get_db_path() -> Result<PathBuf, String> {
     let base = dirs::data_dir().ok_or_else(|| "Could not resolve data directory".to_string())?;
@@ -70,6 +71,12 @@ pub fn run_migrations(conn: &Connection) -> Result<(), String> {
     }
     if version < 3 {
         migrate_v3(conn)?;
+    }
+    if version < 4 {
+        migrate_v4(conn)?;
+    }
+    if version < 5 {
+        migrate_v5(conn)?;
     }
 
     if version < SCHEMA_VERSION {
@@ -220,6 +227,56 @@ fn migrate_v3(conn: &Connection) -> Result<(), String> {
 
     conn.execute(
         "UPDATE app_meta SET value = '3' WHERE key = 'schema_version'",
+        [],
+    )
+    .map_err(|e| format!("Failed to update schema_version in app_meta: {e}"))?;
+
+    Ok(())
+}
+
+fn migrate_v4(conn: &Connection) -> Result<(), String> {
+    use spending::INTERNAL_TRANSFER_PAYEE_SQL;
+
+    let now = Utc::now().to_rfc3339();
+    let sql = format!(
+        "UPDATE transactions
+         SET type = 'transfer',
+             category_id = (
+               SELECT id FROM categories
+               WHERE type = 'transfer' AND parent_id IS NULL
+               ORDER BY sort_order, id
+               LIMIT 1
+             ),
+             updated_at = ?1
+         WHERE type IN ('expense', 'income')
+           AND ({INTERNAL_TRANSFER_PAYEE_SQL})"
+    );
+
+    conn.execute(&sql, [&now])
+        .map_err(|e| format!("Failed to reclassify internal transfers: {e}"))?;
+
+    conn.execute(
+        "UPDATE app_meta SET value = '4' WHERE key = 'schema_version'",
+        [],
+    )
+    .map_err(|e| format!("Failed to update schema_version in app_meta: {e}"))?;
+
+    Ok(())
+}
+
+fn migrate_v5(conn: &Connection) -> Result<(), String> {
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS budget_months (
+            month         TEXT PRIMARY KEY,
+            income_cents  INTEGER NOT NULL DEFAULT 0
+        );
+        ",
+    )
+    .map_err(|e| format!("Failed to run migration v5: {e}"))?;
+
+    conn.execute(
+        "UPDATE app_meta SET value = '5' WHERE key = 'schema_version'",
         [],
     )
     .map_err(|e| format!("Failed to update schema_version in app_meta: {e}"))?;

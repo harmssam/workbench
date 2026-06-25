@@ -2,11 +2,7 @@ use chrono::{Datelike, NaiveDate};
 use rusqlite::Connection;
 use serde::Serialize;
 
-/// Spending totals exclude internal transfers (type or transfer category).
-const SPENDING_EXPENSE_FILTER: &str =
-    "t.type = 'expense' AND (c.id IS NULL OR c.type != 'transfer')";
-const SPENDING_INCOME_FILTER: &str =
-    "t.type = 'income' AND (c.id IS NULL OR c.type != 'transfer')";
+use super::spending::{SPENDING_EXPENSE_FILTER, SPENDING_INCOME_FILTER};
 
 #[derive(Debug, Serialize)]
 pub struct MonthTrend {

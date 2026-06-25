@@ -73,10 +73,12 @@ export interface BudgetCategoryRow {
 
 export interface BudgetMonth {
   month: string;
+  income_cents: number;
+  allocated_cents: number;
+  to_budget_cents: number;
+  actual_income_cents: number;
+  total_spent_cents: number;
   categories: BudgetCategoryRow[];
-  total_target_cents: number;
-  total_actual_cents: number;
-  total_remaining_cents: number;
 }
 
 export interface ImportTransactionPayload {
@@ -351,6 +353,15 @@ export function setBudgetTarget(
 ): Promise<void> {
   return invoke("set_budget_target", {
     input: { category_id: categoryId, month, target_cents: targetCents },
+  });
+}
+
+export function setBudgetMonthIncome(
+  month: string,
+  incomeCents: number,
+): Promise<void> {
+  return invoke("set_budget_month_income", {
+    input: { month, income_cents: incomeCents },
   });
 }
 

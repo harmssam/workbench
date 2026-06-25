@@ -76,6 +76,36 @@ describe("applyMapping", () => {
     });
   });
 
+  it("classifies inter-account movements as transfers before expense keywords", () => {
+    const mapping = {
+      date: "Date",
+      amount: "Amount",
+      memo: "Description",
+      name: "Payee",
+      transaction: "Type",
+      amountMode: "single" as const,
+    };
+
+    const drafts = applyMapping(
+      [
+        {
+          Date: "2024-02-01",
+          Amount: "-775.00",
+          Description: "Completed transfer to Tangerine DDA account",
+          Payee: "Internet Withdrawal to Tangerine",
+          Type: "",
+        },
+      ],
+      mapping,
+      1,
+    );
+
+    expect(drafts[0]).toMatchObject({
+      amountCents: -77500,
+      type: "transfer",
+    });
+  });
+
   it("handles parenthetical negatives from quoted CSV", () => {
     const text = loadFixture("quoted-commas.csv");
     const { headers, rows } = parseCsv(text, "utf-8");

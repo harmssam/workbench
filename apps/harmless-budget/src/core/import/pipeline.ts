@@ -13,6 +13,14 @@ import { normalizeMemo, parseAmountToCents, parseDate } from "./normalize";
 
 const EXPENSE_KEYWORDS = ["debit", "withdrawal", "payment", "expense", "charge", "purchase"];
 const INCOME_KEYWORDS = ["credit", "deposit", "income", "refund"];
+const TRANSFER_KEYWORDS = ["transfer", "tfr", "xfer"];
+const INTERNAL_TRANSFER_PATTERNS = [
+  /internet withdrawal to/i,
+  /withdrawal to tangerine/i,
+  /recurring internet withdrawal/i,
+  /credit card payment/i,
+  /internet deposit from/i,
+];
 
 export function computeImportHash(
   accountId: number,
@@ -32,21 +40,30 @@ export function computeImportHash(
 
 function inferTransactionType(
   amountCents: number,
+  payee: string | null,
+  memo: string | null,
   transactionValue: string | undefined,
 ): TransactionType {
-  const normalized = (transactionValue ?? "").trim().toLowerCase();
+  const combined = [transactionValue, payee, memo]
+    .map((value) => (value ?? "").trim())
+    .filter(Boolean)
+    .join(" ");
+  const normalized = combined.toLowerCase();
 
   if (normalized) {
+    if (
+      TRANSFER_KEYWORDS.some((keyword) => normalized.includes(keyword)) ||
+      INTERNAL_TRANSFER_PATTERNS.some((pattern) => pattern.test(combined))
+    ) {
+      return "transfer";
+    }
+
     if (EXPENSE_KEYWORDS.some((keyword) => normalized.includes(keyword))) {
       return "expense";
     }
 
     if (INCOME_KEYWORDS.some((keyword) => normalized.includes(keyword))) {
       return "income";
-    }
-
-    if (normalized.includes("transfer")) {
-      return "transfer";
     }
   }
 
@@ -134,19 +151,18 @@ export function applyMapping(
       ? parseDebitCreditAmountCents(row, mapping)
       : parseAmountToCents(rawAmount);
     const parsedDate = parseDate(rawDate);
+    const memo = rawMemo.trim() || null;
+    const payee = rawPayee.trim() || null;
     const type =
       parsedAmount === null
         ? "expense"
-        : inferTransactionType(parsedAmount, rawTransaction);
+        : inferTransactionType(parsedAmount, payee, memo, rawTransaction);
     const amountCents =
       parsedAmount === null
         ? 0
         : isDebitCreditMode
           ? parsedAmount
           : normalizeAmountSign(parsedAmount, type);
-
-    const memo = rawMemo.trim() || null;
-    const payee = rawPayee.trim() || null;
 
     const draft: TransactionDraft = {
       rowIndex,

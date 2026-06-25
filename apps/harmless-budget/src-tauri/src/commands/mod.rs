@@ -163,6 +163,13 @@ pub fn set_budget_target(
 }
 
 #[tauri::command]
+pub fn set_budget_month_income(
+    input: budget::SetBudgetMonthIncomeInput,
+) -> Result<(), String> {
+    with_db(|conn| budget::set_month_income(conn, &input))
+}
+
+#[tauri::command]
 pub fn get_dashboard_summary(month: String) -> Result<dashboard::DashboardSummary, String> {
     with_db(|conn| dashboard::get_summary(conn, &month))
 }

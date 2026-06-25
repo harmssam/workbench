@@ -35,7 +35,7 @@ import {
 import { formatCents } from "../lib/money";
 import { cn, currentMonthKey, formatErrorMessage, formatMonthLabel } from "../lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
-import { Input } from "../components/ui/Input";
+import { MonthPicker } from "../components/ui/MonthPicker";
 import { Select } from "../components/ui/Select";
 
 const SLICE_COLORS = [
@@ -210,14 +210,12 @@ export function Analytics() {
         description="Spending patterns from your categorized transactions"
       >
         <div className="flex flex-wrap items-end gap-3">
-          <div className="w-40">
-            <Input
-              type="month"
-              label="Focus month"
-              value={month}
-              onChange={(e) => setMonth(e.target.value)}
-            />
-          </div>
+          <MonthPicker
+            value={month}
+            onChange={setMonth}
+            label="Focus month"
+            id="analytics-month"
+          />
           <div className="w-44">
             <Select
               label="Trend range"

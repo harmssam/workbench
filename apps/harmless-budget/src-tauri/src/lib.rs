@@ -111,6 +111,7 @@ pub fn run() {
             commands::reorder_rules,
             commands::get_budget_month,
             commands::set_budget_target,
+            commands::set_budget_month_income,
             commands::get_dashboard_summary,
             commands::get_spending_trends,
             commands::get_category_breakdown,

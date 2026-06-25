@@ -39,12 +39,13 @@ import {
   suggestRuleName,
 } from "../lib/categories";
 import { formatCents } from "../lib/money";
-import { cn, currentMonthKey, formatErrorMessage } from "../lib/utils";
+import { cn, currentMonthKey, formatErrorMessage, formatMonthLabel } from "../lib/utils";
 import { CompactDate } from "../components/CompactDate";
 import { TruncatedText } from "../components/TruncatedText";
 import { Button } from "../components/ui/Button";
 import { Card, CardContent } from "../components/ui/Card";
 import { Input } from "../components/ui/Input";
+import { MonthPicker } from "../components/ui/MonthPicker";
 import { Select } from "../components/ui/Select";
 
 function payeeKey(txn: Transaction): string {
@@ -120,6 +121,16 @@ export function Transactions() {
       setUncategorizedOnly(true);
       setSearch("");
       setSelectedIds(new Set());
+    }
+  }
+
+  function viewAllInTable() {
+    setUncategorizedOnly(false);
+    setViewMode("table");
+    try {
+      localStorage.setItem("txn-view-mode", "table");
+    } catch {
+      // ignore
     }
   }
 
@@ -407,13 +418,21 @@ export function Transactions() {
     <div className="flex h-full flex-col overflow-hidden">
       <PageHeader
         title="Transactions"
-        description={
+        description={`${formatMonthLabel(month)} · ${
           viewMode === "sort"
-            ? "Drag transactions into category bins"
-            : "Categorize spending before analytics"
-        }
+            ? "Uncategorized only — drag into category bins"
+            : uncategorizedOnly
+              ? "Uncategorized transactions"
+              : "All transactions"
+        }`}
       >
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-end gap-3">
+          <MonthPicker
+            value={month}
+            onChange={setMonth}
+            label="Month"
+            id="transactions-month"
+          />
           <div
             className="flex rounded-lg border border-zinc-700 p-0.5"
             role="group"
@@ -558,14 +577,6 @@ export function Transactions() {
                   Payees
                 </Button>
               )}
-              <div className="w-40">
-                <Input
-                  type="month"
-                  label="Month"
-                  value={month}
-                  onChange={(e) => setMonth(e.target.value)}
-                />
-              </div>
               <div className="w-48">
                 <Select
                   label="Account"
@@ -590,16 +601,37 @@ export function Transactions() {
                   />
                 </div>
               )}
-              <label className="flex items-center gap-2 pb-1 text-sm text-zinc-400">
-                <input
-                  type="checkbox"
-                  checked={uncategorizedOnly}
-                  onChange={(e) => setUncategorizedOnly(e.target.checked)}
-                  className="h-4 w-4 rounded border-zinc-600 bg-zinc-900 text-emerald-600"
-                />
-                Uncategorized only
-              </label>
+              {viewMode === "table" ? (
+                <label className="flex items-center gap-2 pb-1 text-sm text-zinc-400">
+                  <input
+                    type="checkbox"
+                    checked={uncategorizedOnly}
+                    onChange={(e) => setUncategorizedOnly(e.target.checked)}
+                    className="h-4 w-4 rounded border-zinc-600 bg-zinc-900 text-emerald-600"
+                  />
+                  Uncategorized only
+                </label>
+              ) : (
+                <div className="flex flex-wrap items-center gap-2 pb-1 text-sm text-zinc-500">
+                  <span>Sort bins show uncategorized only.</span>
+                  <button
+                    type="button"
+                    onClick={viewAllInTable}
+                    className="text-emerald-500/90 hover:text-emerald-400"
+                  >
+                    View all in table →
+                  </button>
+                </div>
+              )}
             </div>
+
+            {viewMode === "table" && !loading && transactions.length > 0 && (
+              <p className="text-sm text-zinc-500">
+                {visibleTransactions.length} transaction
+                {visibleTransactions.length === 1 ? "" : "s"}
+                {search.trim() ? " matching search" : ""}
+              </p>
+            )}
 
             {uncategorizedCount > 0 && (
               <p className="text-sm text-amber-400/90">

@@ -5,6 +5,7 @@ actor CPUMonitor {
     private var previousTicks: CPUTicks?
     private var cachedProcesses: [CPUProcessActivity] = []
     private var lastProcessSampleTime: Date?
+    private var processSampleInFlight = false
 
     private let processSampleInterval: TimeInterval = 3
 
@@ -28,6 +29,15 @@ actor CPUMonitor {
            now.timeIntervalSince(lastSample) < processSampleInterval {
             return cachedProcesses
         }
+        if processSampleInFlight {
+            return cachedProcesses
+        }
+
+        processSampleInFlight = true
+        defer {
+            processSampleInFlight = false
+            lastProcessSampleTime = Date()
+        }
 
         guard let output = try? await ProcessRunner.run(
             executable: "/bin/ps",
@@ -38,7 +48,6 @@ actor CPUMonitor {
 
         let processes = parseProcessOutput(output, limit: limit)
         cachedProcesses = processes
-        lastProcessSampleTime = now
         return processes
     }
 

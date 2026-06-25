@@ -12,7 +12,10 @@ actor NetworkMonitor {
     private var previousProcessBytes: [String: (bytesIn: UInt64, bytesOut: UInt64, pid: Int32)] = [:]
     private var cachedProcesses: [NetworkProcessActivity] = []
     private var lastProcessSampleTime: Date?
+    private var processSampleInFlight = false
     private let processSampleInterval: TimeInterval = 3
+    /// nettop -L 1 routinely takes ~5s on busy systems; keep margin above that.
+    private let nettopTimeout: TimeInterval = 10
 
     func sampleRates() async -> (bytesIn: UInt64, bytesOut: UInt64) {
         let current = await readInterfaceStats()
@@ -51,17 +54,30 @@ actor NetworkMonitor {
            now.timeIntervalSince(lastSample) < processSampleInterval {
             return cachedProcesses
         }
+        if processSampleInFlight {
+            return cachedProcesses
+        }
+
+        processSampleInFlight = true
+        defer {
+            processSampleInFlight = false
+            lastProcessSampleTime = Date()
+        }
 
         CrashReporter.breadcrumb("NetworkMonitor.sampleProcesses: nettop start")
-        guard let output = try? await ProcessRunner.run(
-            executable: "/usr/bin/nettop",
-            arguments: [
-                "-P", "-L", "1",
-                "-k", "time,interface,state,rx_dupe,rx_ooo,re-tx,rtt_avg,rcvsize,tx_win,tc_class,tc_mgt,cc_algo,P,C,R,W,arch",
-                "-t", "external"
-            ],
-            timeout: 5
-        ) else {
+        let output: String
+        do {
+            output = try await ProcessRunner.run(
+                executable: "/usr/bin/nettop",
+                arguments: [
+                    "-P", "-L", "1",
+                    "-k", "time,interface,state,rx_dupe,rx_ooo,re-tx,rtt_avg,rcvsize,tx_win,tc_class,tc_mgt,cc_algo,P,C,R,W,arch",
+                    "-t", "external"
+                ],
+                timeout: nettopTimeout
+            )
+        } catch {
+            AppLogger.debug("nettop failed: \(error)", category: AppLogger.monitor)
             CrashReporter.breadcrumb("NetworkMonitor.sampleProcesses: nettop failed")
             return cachedProcesses
         }
@@ -90,7 +106,6 @@ actor NetworkMonitor {
         }
 
         previousProcessBytes = current
-        lastProcessSampleTime = now
 
         cachedProcesses = activities
             .sorted { $0.totalRate > $1.totalRate }

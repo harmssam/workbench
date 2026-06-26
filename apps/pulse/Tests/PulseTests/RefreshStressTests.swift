@@ -37,4 +37,35 @@ struct RefreshStressTests {
             }
         }
     }
+
+    @Test("ProcessRunner survives nettop overlapping short-lived tools")
+    func nettopWithParallelShortTools() async throws {
+        for _ in 0..<6 {
+            try await withThrowingTaskGroup(of: String.self) { group in
+                group.addTask {
+                    try await ProcessRunner.run(
+                        executable: "/usr/bin/nettop",
+                        arguments: [
+                            "-P", "-L", "1",
+                            "-k", "time,interface,state,rx_dupe,rx_ooo,re-tx,rtt_avg,rcvsize,tx_win,tc_class,tc_mgt,cc_algo,P,C,R,W,arch",
+                            "-t", "external"
+                        ],
+                        timeout: 10
+                    )
+                }
+                for _ in 0..<3 {
+                    group.addTask {
+                        try await ProcessRunner.run(
+                            executable: "/bin/ps",
+                            arguments: ["-Aceo", "pid,comm"],
+                            timeout: 5
+                        )
+                    }
+                }
+                for try await output in group {
+                    #expect(!output.isEmpty)
+                }
+            }
+        }
+    }
 }

@@ -28,6 +28,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         AppLogger.info("Pulse is terminating", category: AppLogger.general)
+
+        let restoreGroup = DispatchGroup()
+        restoreGroup.enter()
+        Task {
+            await appState?.restoreFanControlOnExit()
+            restoreGroup.leave()
+        }
+        _ = restoreGroup.wait(timeout: .now() + 3)
+
         CrashReporter.markCleanShutdown()
         statusBarController?.teardown()
     }

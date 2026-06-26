@@ -77,6 +77,23 @@ final class AppState: ObservableObject {
         }
     }
 
+    static let fanBoostDurationOptions = [5, 10, 15, 30]
+
+    @Published var fanBoostDurationMinutes: Int = {
+        let saved = UserDefaults.standard.integer(forKey: "fanBoostDurationMinutes")
+        let fallback = 10
+        let options = [5, 10, 15, 30]
+        return options.contains(saved) ? saved : fallback
+    }() {
+        didSet {
+            UserDefaults.standard.set(fanBoostDurationMinutes, forKey: "fanBoostDurationMinutes")
+        }
+    }
+
+    @Published private(set) var isFanBoostActive = false
+    @Published private(set) var fanBoostRemainingSeconds: Int?
+    @Published private(set) var fanBoostError: String?
+
     @Published var logLevel: LogLevel = LogLevel.loadSaved() {
         didSet {
             AppLogger.minimumLevel = logLevel
@@ -108,6 +125,7 @@ final class AppState: ObservableObject {
 
     private var refreshTask: Task<Void, Never>?
     private var updateCheckTask: Task<Void, Never>?
+    private var fanBoostTask: Task<Void, Never>?
     private var downHistory = HistoryBuffer()
     private var upHistory = HistoryBuffer()
     private var diskReadHistoryBuffer = HistoryBuffer()
@@ -176,6 +194,7 @@ final class AppState: ObservableObject {
         refreshTask?.cancel()
         updateCheckTask?.cancel()
         updateTask?.cancel()
+        fanBoostTask?.cancel()
     }
 
     private func applyRates(_ rates: RefreshRates) {
@@ -427,6 +446,68 @@ final class AppState: ObservableObject {
         AppLogger.info("Terminating current instance for update", category: AppLogger.update)
         // Quit this instance
         NSApp.terminate(nil)
+    }
+
+    func toggleFanBoost() async {
+        if isFanBoostActive {
+            await stopFanBoost()
+        } else {
+            await startFanBoost()
+        }
+    }
+
+    func startFanBoost() async {
+        guard !isFanBoostActive else { return }
+
+        fanBoostError = nil
+        let applied = await FanController.shared.applyMaxSpeed()
+        guard applied else {
+            fanBoostError = "Could not take fan control"
+            return
+        }
+
+        isFanBoostActive = true
+        let duration = TimeInterval(fanBoostDurationMinutes * 60)
+        let deadline = Date().addingTimeInterval(duration)
+        fanBoostRemainingSeconds = Int(duration.rounded())
+
+        fanBoostTask?.cancel()
+        fanBoostTask = Task {
+            while !Task.isCancelled, Date() < deadline {
+                _ = await FanController.shared.applyMaxSpeed()
+
+                let remaining = max(0, Int(deadline.timeIntervalSinceNow.rounded()))
+                await MainActor.run {
+                    self.fanBoostRemainingSeconds = remaining > 0 ? remaining : nil
+                }
+
+                try? await Task.sleep(for: .seconds(5))
+            }
+
+            guard !Task.isCancelled else { return }
+            await self.finishFanBoost()
+        }
+    }
+
+    func stopFanBoost() async {
+        fanBoostTask?.cancel()
+        fanBoostTask = nil
+        await finishFanBoost()
+    }
+
+    func restoreFanControlOnExit() async {
+        fanBoostTask?.cancel()
+        fanBoostTask = nil
+        _ = await FanController.shared.restoreAutomatic()
+        isFanBoostActive = false
+        fanBoostRemainingSeconds = nil
+    }
+
+    private func finishFanBoost() async {
+        _ = await FanController.shared.restoreAutomatic()
+        isFanBoostActive = false
+        fanBoostRemainingSeconds = nil
+        fanBoostTask = nil
     }
 
     func purgeMemory() async {

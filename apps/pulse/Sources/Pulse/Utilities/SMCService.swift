@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 /// Single shared gateway for AppleSMC IOKit access.
@@ -19,6 +20,18 @@ actor SMCService {
         smc.connectIfNeeded()
         guard smc.isConnected else { return nil }
         return smc.readFloat(key: key)
+    }
+
+    func readKey(key: String) -> SMC.KeyReadResult? {
+        smc.connectIfNeeded()
+        guard smc.isConnected else { return nil }
+        return smc.readKey(key: key)
+    }
+
+    func writeKey(key: String, bytes: [UInt8]) -> kern_return_t {
+        smc.connectIfNeeded()
+        guard smc.isConnected else { return KERN_FAILURE }
+        return smc.writeKey(key: key, bytes: bytes)
     }
 
     var isConnected: Bool {

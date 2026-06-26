@@ -51,6 +51,63 @@ final class SMC {
         return output.bytes.0
     }
 
+    struct KeyReadResult {
+        let dataSize: UInt32
+        let dataType: UInt32
+        let bytes: [UInt8]
+    }
+
+    func readKey(key: String) -> KeyReadResult? {
+        guard isConnected else { return nil }
+
+        var input = SMCKeyData()
+        var output = SMCKeyData()
+
+        input.key = fourCharCode(from: key)
+        input.data8 = 9 // kSMCReadKeyInfo
+
+        guard callStruct(input: &input, output: &output) == KERN_SUCCESS else { return nil }
+
+        let dataSize = output.keyInfo.dataSize
+        guard dataSize > 0 else { return nil }
+
+        input.keyInfo.dataSize = dataSize
+        input.data8 = 5 // kSMCReadBytes
+
+        guard callStruct(input: &input, output: &output) == KERN_SUCCESS else { return nil }
+
+        return KeyReadResult(
+            dataSize: dataSize,
+            dataType: output.keyInfo.dataType,
+            bytes: byteTupleToArray(output.bytes, count: Int(dataSize))
+        )
+    }
+
+    func writeKey(key: String, bytes: [UInt8]) -> kern_return_t {
+        guard isConnected else { return KERN_FAILURE }
+
+        var input = SMCKeyData()
+        var output = SMCKeyData()
+
+        input.key = fourCharCode(from: key)
+        input.data8 = 9 // kSMCReadKeyInfo
+
+        guard callStruct(input: &input, output: &output) == KERN_SUCCESS else {
+            return KERN_FAILURE
+        }
+
+        let dataSize = output.keyInfo.dataSize
+        guard dataSize > 0 else { return KERN_FAILURE }
+
+        input = SMCKeyData()
+        input.key = fourCharCode(from: key)
+        input.keyInfo.dataSize = dataSize
+        input.data8 = 6 // kSMCWriteBytes
+        setBytes(&input.bytes, from: bytes, count: Int(dataSize))
+
+        return callStruct(input: &input, output: &output)
+    }
+
     func readFloat(key: String) -> Double? {
         guard isConnected else { return nil }
 
@@ -83,6 +140,34 @@ final class SMC {
             // fpe2 fallback (older style)
             let raw = (UInt16(output.bytes.0) << 8) | UInt16(output.bytes.1)
             return Double(raw) / 4.0
+        }
+    }
+
+    private func byteTupleToArray(
+        _ tuple: (UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8,
+                  UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8,
+                  UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8,
+                  UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8),
+        count: Int
+    ) -> [UInt8] {
+        withUnsafeBytes(of: tuple) { raw in
+            Array(raw.prefix(count))
+        }
+    }
+
+    private func setBytes(
+        _ tuple: inout (UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8,
+                        UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8,
+                        UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8,
+                        UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8),
+        from bytes: [UInt8],
+        count: Int
+    ) {
+        withUnsafeMutableBytes(of: &tuple) { raw in
+            let limit = min(count, bytes.count, raw.count)
+            for index in 0..<limit {
+                raw[index] = bytes[index]
+            }
         }
     }
 

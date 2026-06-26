@@ -583,7 +583,7 @@ struct PopoverView: View {
         ) : nil
 
         let empty = !t.isAvailable && !f.isAvailable
-        return MetricCard(
+        let card = MetricCard(
             title: "Thermal",
             icon: "thermometer",
             trailingHeader: grabber,
@@ -594,6 +594,61 @@ struct PopoverView: View {
             emptyMessage: empty ? "Thermal sensors unavailable" : nil,
             afterSparklines: fanContent
         )
+
+        return AnyView(
+            VStack(spacing: 8) {
+                card
+
+                if f.isAvailable {
+                    HStack(spacing: 8) {
+                        Picker("Duration", selection: $appState.fanBoostDurationMinutes) {
+                            ForEach(AppState.fanBoostDurationOptions, id: \.self) { minutes in
+                                Text("\(minutes) min").tag(minutes)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .frame(width: 84)
+                        .disabled(appState.isFanBoostActive)
+                        .help("How long to keep fans at maximum speed")
+
+                        Button {
+                            Task { await appState.toggleFanBoost() }
+                        } label: {
+                            if appState.isFanBoostActive, let remaining = appState.fanBoostRemainingSeconds {
+                                Label("Stop Boost (\(formatBoostCountdown(remaining)))", systemImage: "fanblades.fill")
+                                    .font(.caption.weight(.semibold))
+                            } else {
+                                Label("Boost Fans", systemImage: "fanblades.fill")
+                                    .font(.caption.weight(.semibold))
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.orange)
+                        .controlSize(.small)
+                        .help(appState.isFanBoostActive
+                              ? "Stop manual fan boost and return to automatic control"
+                              : "Run all fans at 100% before heavy workloads")
+                    }
+
+                    if let error = appState.fanBoostError {
+                        Text(error)
+                            .font(.caption2)
+                            .foregroundStyle(.red)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+        )
+    }
+
+    private func formatBoostCountdown(_ seconds: Int) -> String {
+        let minutes = seconds / 60
+        let secs = seconds % 60
+        if minutes > 0 {
+            return String(format: "%d:%02d", minutes, secs)
+        }
+        return "\(secs)s"
     }
 
     private func gpuSummaryItems(for gpu: GPUSnapshot) -> [SummaryItem] {

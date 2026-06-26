@@ -1,23 +1,28 @@
 # workbench
 
-A collection of macOS applications and utility scripts.
+macOS apps and utility scripts — all local, no accounts required.
 
-Projects live under `apps/` (standalone applications with their own UI and distribution) or `scripts/` (focused command-line utilities and one-off tools).
+| | |
+|---|---|
+| **Pulse** | Menu bar system monitor (network, CPU, GPU, thermals, memory) |
+| **Harmless Budget** | Zero-based personal budgeting app — data stays on your Mac |
+| **Scripts** | Small CLI tools for dev and hardware testing |
+
+Projects live under `apps/` (standalone applications) or `scripts/` (command-line utilities).
 
 ## Structure
 
 ```
-apps/       # Menu bar apps, CLIs, and other distributable applications
+apps/       # Menu bar apps and desktop applications
 scripts/    # Utility scripts and small automation tools
-docs/       # Cross-cutting notes (optional)
 ```
 
 ## Applications
 
-| App | Description | Version | Releases |
-|-----|-------------|---------|----------|
-| [Pulse](apps/pulse/) | Real-time network, disk, CPU, and GPU monitor for the menu bar | 0.1.2 | [Download](https://github.com/harmssam/workbench/releases) |
-| [Harmless Budget](apps/harmless-budget/) | Local-only zero-based budgeting app — your data stays on your Mac | 0.1.0 | [Download](https://github.com/harmssam/workbench/releases) |
+| App | Description | Latest | Releases |
+|-----|-------------|--------|----------|
+| [Pulse](apps/pulse/) | Real-time network, disk, CPU, GPU, temperature, and fan monitor for the menu bar | **0.3.1** | [Download](https://github.com/harmssam/workbench/releases/latest) |
+| [Harmless Budget](apps/harmless-budget/) | Local-only zero-based budgeting — CSV import, rules, analytics | **0.1.0** | [Download](https://github.com/harmssam/workbench/releases) |
 
 ### Pulse
 
@@ -25,7 +30,7 @@ Install from [GitHub Releases](https://github.com/harmssam/workbench/releases) o
 
 ```bash
 # Install a release build
-# 1. Download Pulse-v0.1.2-macos-arm64.zip from Releases
+# 1. Download Pulse-0.3.1-macos-arm64.zip from Releases
 # 2. Unzip and copy to Applications:
 cp -r Pulse.app /Applications/
 open /Applications/Pulse.app
@@ -39,7 +44,7 @@ Install from [GitHub Releases](https://github.com/harmssam/workbench/releases) o
 
 ```bash
 # Install a release build
-# 1. Download Harmless-Budget-v0.1.0-macos-arm64.zip from Releases
+# 1. Download Harmless-Budget-0.1.0-macos-arm64.zip from Releases
 # 2. Unzip and copy to Applications:
 cp -r "Harmless Budget.app" /Applications/
 open "/Applications/Harmless Budget.app"
@@ -62,7 +67,7 @@ Requires Python 3 and, on macOS, Swift for GPU stress.
 
 ## Requirements
 
-- macOS 14+ for GUI applications
+- macOS 14+ (Apple Silicon) for GUI applications
 - Toolchain details are documented in each project's README
 
 ## License

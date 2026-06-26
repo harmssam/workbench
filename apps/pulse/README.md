@@ -2,7 +2,7 @@
 
 A lightweight macOS menu bar monitor for network, disk, CPU, GPU, temperature, and fan activity.
 
-**Current release: v0.2.4**
+**Current release: v0.3.1**
 
 <div align="center">
   <img src="images/screenshot.png" width="650" />
@@ -11,10 +11,11 @@ A lightweight macOS menu bar monitor for network, disk, CPU, GPU, temperature, a
 ## Features
 
 - Compact Mbps readout in the menu bar
-- Popover dashboard with per-metric sparklines and a "Thermal" card (CPU/GPU temps + animated fan icons)
+- Liquid-glass popover dashboard with draggable metric cards, sparklines, and a Thermal card (CPU/GPU temps + animated fan icons)
 - Top active processes for network, disk, CPU, and GPU
 - Fan icons animate with real RPM (rotation speed + motion blur)
-- Optional auto-update (disabled by default) — toggle in the top-right of the popover
+- Memory card with a one-click purge to free inactive RAM
+- Optional auto-update (disabled by default) — toggle in settings
 
 ## Requirements
 
@@ -82,10 +83,10 @@ swift test
 
 ```bash
 chmod +x scripts/release.sh
-./scripts/release.sh 0.2.4
+./scripts/release.sh 0.3.1
 ```
 
-This creates and pushes a `pulse-v0.2.4` tag. GitHub Actions builds the app, packages a zip, and publishes the release.
+This creates and pushes a `pulse-v0.3.1` tag. GitHub Actions builds the app, packages a zip, and publishes the release.
 
 ## Architecture
 

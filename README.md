@@ -8,6 +8,7 @@ macOS apps and utility scripts — all local, no accounts required.
 | **Harmless Budget** | Zero-based personal budgeting app — data stays on your Mac |
 | **Burrow** | Native macOS maintenance UI prototype (safe demo mode) |
 | **Scripts** | Small CLI tools for dev and hardware testing |
+| **Carol of the Bells (CHIMERA)** | Browser SATB choir player (Leontovych *Shchedryk*) — see [chimera-carol/](chimera-carol/) |
 
 Projects live under `apps/` (standalone applications) or `scripts/` (command-line utilities).
 

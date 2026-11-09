@@ -1,0 +1,13 @@
+node_modules/
+target/
+dist/
+src/wasm/chimera.wasm
+.vite/
+playwright-report/
+test-results/
+.DS_Store
+*.log
+.herenow/
+.env
+.env.*
+out/
